@@ -1,0 +1,20 @@
+{
+    "name": "CUSF / SondeHub Predictor",
+    "short_name": "Predictor",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#0070a3",
+    "icons": [
+        {
+            "src": "images/target-8-sm.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "images/target-8-sm.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

@@ -1,25 +1,231 @@
-# CUSF Landing Predictor - Tawhiri / Leaflet Version
+<div align="center">
 
-Cambridge University Spaceflight landing predictor - a web-based tool for predicting the flight path and landing location of latex meteorological sounding balloons. 
+# WASA 気球実験用 予測ツール
 
-This fork of the [original predictor](https://github.com/jonsowman/cusf-standalone-predictor) contains a continuation of the original CUSF predictor, which utilises the [Tawhiri API](https://github.com/projecthorus/tawhiri/), and also uses Leaflet for mapping instead of Google Maps. 
+高高度気球の飛行（上昇 → 破裂 → 下降）を予測し、着地点・不確実性・海陸判定を地図上で可視化するシングルページ Web アプリです。  
+Leaflet + Tawhiri API をベースに、WASA 運用向けに日本語UI・JST対応・愛媛13バリアント・放球NG判定を実装しています。
 
-A live version of the predictor intended for non-commercial use is available at http://predict.sondehub.org/ , hosted by the [Sondehub project](https://github.com/projecthorus/sondehub-infra/wiki).
+<sub>静的フロントエンド。予測計算は外部/ローカル Tawhiri API を利用します。</sub>
 
-If hosting this yourself, please note that it uses the Sondehub-hosted instance of Tawhiri. Please [contact us](https://github.com/projecthorus/sondehub-infra/wiki#contacts) to discuss fair usage of this API.
+</div>
 
-## License
+---
 
-This work is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or any later version. This work is distributed in the hope that it will be useful, but without any warranty; without even the implied warranty of merchantability or fitness for a particular purpose.  
+## 目次
+1. 目的 / Overview
+2. 主な機能
+3. クイックスタート
+4. API接続モード
+5. 放球NG判定（愛媛連動）
+6. 愛媛気球実験モード（13バリアント）
+7. 海陸判定ロジック
+8. 画面と操作の要点
+9. ディレクトリ構成
+10. 開発メモ
+11. 既知の制約
+12. ライセンス
+13. 関連ドキュメント
 
-## Credits & Acknowledgments
-Credit as detailed in individual files, but notably:  
+---
 
-* Rich Wareham - The new predictor and the hourly predictor system  
-* Fergus Noble, Ed Moore and many others  
-* Adam Grieg
-* Jon Sowman
+## 1. 目的 / Overview
+本ツールは、放球計画時の意思決定を高速化することを目的にしています。
 
-Work to switch the predictor across to Tawhiri, and addition of other features by:
-* Mark Jessop - <vk5qi@rfhead.net>
+- 打ち上げ条件に対する着地点予測
+- パラメータ揺らぎに対する着地点分散の可視化
+- 海上/陸上リスクの定量化
+- 現場運用（モバイル・車載）での即応
+
+---
+
+## 2. 主な機能
+
+### 標準予測
+- 1本の飛行経路（Launch / Burst / Landing）を描画
+- 到達距離、飛行時間、最終実行時刻、使用モデルをINFO表示
+- 落下位置一覧へ履歴追加（クリックで追跡）
+
+### 愛媛気球実験モード（13バリアント）
+- BASE + 12変動（上昇・下降・破裂高度）を同時実行
+- 色分け経路、結果テーブル、モバイルカード、凸包（コンベックスハル）
+- 平均着地点、最大偏差、陸海割合を統計表示
+
+### 放球NG判定（Launch Window）
+- 15分刻み × 6時間（25スロット）を評価
+- local API時は 13バリアントを各スロットで実行し海落ち確率を算出
+- 海落ち/陸落ち確率を用いてNG判定（閾値スライダー対応）
+- local API時はスライダー操作で再計算せず再表示のみ
+
+### 海陸判定（ハイブリッド）
+- ローカルGeoJSON（高速）
+- BigDataCloud 逆ジオコーディング（沿岸補正）
+- Overpass 内陸水域チェック（湖・河川補正）
+
+### 運用補助
+- CSVログ重ね合わせ（実測比較）
+- 高度グラフ・風速グラフ
+- 共有URLコピー / 画像エクスポート
+- 予測履歴保持（単発・愛媛履歴）
+- PWA（Service Worker）対応
+
+---
+
+## 3. クイックスタート
+
+### 推奨（CORSプロキシ付き）
+```bash
+node cors-proxy.js
+```
+
+ブラウザで以下を開きます。
+
+http://localhost:3000
+
+### 代替（静的配信のみ）
+```bash
+python test.py
+```
+
+---
+
+## 4. API接続モード
+
+UIの「API接続先」から選択します。
+
+- SondeHub (Public)
+	- 通常運用向け
+	- 外部API負荷軽減のため放球NG判定は間隔付き実行
+- Localhost (Docker)
+	- 過去日時シミュレーション向け
+	- 放球NG判定は高速実行（25スロットを連続評価）
+- カスタム
+	- 任意URLのTawhiri互換API
+
+---
+
+## 5. 放球NG判定（愛媛連動）
+
+放球NG判定ボタンで起動します。
+
+- 評価対象: 現在時刻を起点とする25スロット
+- local API時:
+	- 各スロットで愛媛13バリアントを評価
+	- 海落ち確率 / 陸落ち確率を算出
+	- 閾値以上の陸落ち確率をNG判定
+- SondeHub(public)時:
+	- API負荷配慮のため従来の軽量評価フロー
+
+---
+
+## 6. 愛媛気球実験モード（13バリアント）
+
+### マージン
+- 上昇速度: ±1 m/s
+- 下降速度: ±3 m/s
+- 破裂高度: +10% / -20%
+
+### ラベル
+- BASE
+- ASC-/ASC+
+- DES-/DES+
+- BURST-/BURST+
+- A-D-/A+D+
+- A-B-/A+B+
+- D-B-/D+B+
+
+### 表示
+- BASEは黒太線で強調
+- INFOの距離/飛行時間はBASE値を表示
+- 愛媛実行履歴（最大10件）をResult領域にも表示
+
+---
+
+## 7. 海陸判定ロジック
+
+共通関数で判定を統一しています（単発・13バリアント・放球NG判定）。
+
+1. ローカルGeoJSONで一次判定
+2. 沿岸/曖昧領域はBigDataCloudで補正
+3. 陸判定時はOverpassで内陸水域を再確認
+
+この構成により、
+
+- 海岸近傍での誤陸判定
+- 内陸水域での誤海判定
+- 単発と13バリアントでの判定不一致
+
+を低減しています。
+
+---
+
+## 8. 画面と操作の要点
+
+- SETTINGSタブ
+	- 打ち上げ条件入力
+	- モード選択（標準 / 愛媛）
+- RESULTSタブ
+	- シナリオ情報（INFO）
+	- 落下位置一覧
+	- 愛媛実行履歴
+- フローティング
+	- INFOパネル（抽出時）と統計パネルはドラッグ移動可能
+
+---
+
+## 9. ディレクトリ構成
+
+```text
+.
+├── index.html
+├── css/
+│   ├── predictor.css
+│   └── mobile.css
+├── js/
+│   ├── pred/
+│   │   ├── pred-new.js
+│   │   ├── launch-window.js
+│   │   ├── landsea.js
+│   │   ├── mobile_ui.js
+│   │   └── ...
+│   └── calc/
+├── data/
+│   └── land_japan_raw.geojson
+├── sites.json
+├── cors-proxy.js
+├── sw.js
+└── manifest.json
+```
+
+---
+
+## 10. 開発メモ
+
+- コード変更時は以下も更新してください
+	- HANDOVER.md
+	- technical_overview.md
+- Service Worker のキャッシュ対象を更新した場合は `sw.js` のキャッシュバージョンを更新
+
+---
+
+## 11. 既知の制約
+
+- 公開API利用時は外部サービスの可用性に依存
+- 沿岸・離島の判定はデータ品質に依存
+- 放球NG判定の local 13バリアント評価は計算量が大きい
+
+---
+
+## 12. ライセンス
+
+GPLv3
+
+詳細は LICENSE を参照してください。
+
+---
+
+## 13. 関連ドキュメント
+
+- HANDOVER.md
+- technical_overview.md
+- AssignmentE.md
 

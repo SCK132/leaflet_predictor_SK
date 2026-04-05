@@ -30,23 +30,23 @@ function initMap(centre_lat, centre_lon, zoom_level) {
     });
 
     // Add ESRI Satellite Map layers.
-    var esrimapLink = 
-    '<a href="http://www.esri.com/">Esri</a>';
-    var esriwholink = 
-    'i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+    var esrimapLink =
+        '<a href="http://www.esri.com/">Esri</a>';
+    var esriwholink =
+        'i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
     var esri_sat_map = L.tileLayer(
-    'http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', 
-    {
-        attribution: '&copy; '+esrimapLink+', '+esriwholink,
-        maxZoom: 18,
-    });
+        'http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+            attribution: '&copy; ' + esrimapLink + ', ' + esriwholink,
+            maxZoom: 18,
+        });
 
-    var map_layers = {'OSM':osm_map, 'ESRI Satellite':esri_sat_map, 'OpenTopoMap':osm_topo_map};
+    var map_layers = { 'OSM': osm_map, 'ESRI Satellite': esri_sat_map, 'OpenTopoMap': osm_topo_map };
 
-    map.addControl(new L.Control.Layers(map_layers, null, {position: 'topleft'}));
+    map.addControl(new L.Control.Layers(map_layers, null, { position: 'topleft' }));
 
     // Map scale
-    L.control.scale({imperial: false, metric: true}).addTo(map);
+    L.control.scale({ imperial: false, metric: true }).addTo(map);
 
 
 }
@@ -54,14 +54,14 @@ function initMap(centre_lat, centre_lon, zoom_level) {
 // Enable or disable user control of the map canvas, including scrolling,
 // zooming and clicking
 function enableMap(map, state) {
-    if ( state != false && state != true) {
+    if (state != false && state != true) {
         appendDebug("Unrecognised map state");
     } else if (state == false) {
         map.draggable = false;
         map.disableDoubleClickZoom = true;
         map.scrollwheel = false;
         map.navigationControl = false;
-    } else if (state == true ) {
+    } else if (state == true) {
         map.draggable = true;
         map.disableDoubleClickZoom = false;
         map.scrollwheel = false;
@@ -78,7 +78,7 @@ function showMousePos(LatLng) {
     $("#cursor_lon").html(curr_lon);
     // if we have a prediction displayed
     // show range from launch and land:
-    if ( (map_items['launch_marker'] != null) && (hourly_mode == false)) {
+    if ((map_items['launch_marker'] != null) && (hourly_mode == false)) {
         var launch_pt = map_items['launch_marker'].getLatLng();
         var land_pt = map_items['land_marker'].getLatLng();
         var range_launch = distHaversine(launch_pt, LatLng, 1);
@@ -86,7 +86,7 @@ function showMousePos(LatLng) {
         $("#cursor_pred_launchrange").html(range_launch);
         $("#cursor_pred_landrange").html(range_land);
     }
-    
+
 }
 
 // Read the latitude and longitude currently in the launch card and plot
@@ -98,7 +98,7 @@ function plotClick() {
     click_lat = parseFloat($("#lat").val());
     click_lon = parseFloat($("#lon").val());
     // Make sure the data is valid before we try and do anything with it
-    if ( isNaN(click_lat) || isNaN(click_lon) ) return;
+    if (isNaN(click_lat) || isNaN(click_lon)) return;
     var click_pt = new L.LatLng(click_lat, click_lon);
 
     // var launch_icon = new google.maps.MarkerImage(launch_img,
@@ -109,18 +109,18 @@ function plotClick() {
 
     launch_icon = L.icon({
         iconUrl: launch_img,
-        iconSize: [10,10],
-        iconAnchor: [5,5]
+        iconSize: [10, 10],
+        iconAnchor: [5, 5]
     });
 
-    clickIconTitle = 'Currently selected launch location (' + click_lat + ', ' + click_lon+')'
+    clickIconTitle = 'Currently selected launch location (' + click_lat + ', ' + click_lon + ')'
 
     clickMarker = L.marker(click_pt,
         {
-            title:clickIconTitle, 
+            title: clickIconTitle,
             icon: launch_icon
         })
-        .bindTooltip(clickIconTitle,{permanent:false,direction:'right'})
+        .bindTooltip(clickIconTitle, { permanent: false, direction: 'right' })
         .addTo(map);
 
     map_items['clickMarker'] = clickMarker;
@@ -145,11 +145,11 @@ function setFormLatLon(LatLng) {
 // on the map canvas, will write the coordinates of the clicked place to the
 // launch card
 function setLatLonByClick(state) {
-    if ( state == true ) {
+    if (state == true) {
         // Check this listener doesn't already exist
         if (!clickListener) {
             appendDebug("Enabling the set with click listener");
-            clickListener = map.on('click', function(event) {
+            clickListener = map.on('click', function (event) {
                 appendDebug("Got a click from user, setting values into form");
                 $("#error_window").fadeOut();
                 setFormLatLon(event.latlng.wrap());
@@ -157,9 +157,9 @@ function setLatLonByClick(state) {
         }
         // Tell the user what to do next
         throwError("Now click your desired launch location on the map");
-    } else if ( state == false ) {
+    } else if (state == false) {
         appendDebug("Removing the set with click listener");
-        map.off('click',clickListener);
+        map.off('click', clickListener);
         clickListener = null;
     } else {
         appendDebug("Unrecognised state for setLatLonByClick");
@@ -170,25 +170,25 @@ function setLatLonByClick(state) {
 // onto the map canvas - this function clears all of them
 function clearMapItems() {
     cursorPredHide();
-    if( getAssocSize(map_items) > 0 ) {
+    if (getAssocSize(map_items) > 0) {
         appendDebug("Clearing previous map trace");
-        for( i in map_items ) {
+        for (i in map_items) {
             map_items[i].remove();
         }
     }
     map_items = [];
 
     // Clear hourly prediction data too
-    if( getAssocSize(hourly_predictions) > 0 ) {
+    if (getAssocSize(hourly_predictions) > 0) {
         appendDebug("Clearing hourly prediction data.");
-        for( i in hourly_predictions) {
-            for (j in hourly_predictions[i]['layers']){
+        for (i in hourly_predictions) {
+            for (j in hourly_predictions[i]['layers']) {
                 hourly_predictions[i]['layers'][j].remove();
             }
         }
     }
 
-    if(hourly_polyline){
+    if (hourly_polyline) {
         hourly_polyline.remove();
         hourly_polyline = null;
     }
@@ -196,20 +196,20 @@ function clearMapItems() {
 
 // The Haversine formula to calculate the distance across the surface between
 // two points on the Earth
-distHaversine = function(p1, p2, precision) {
-  var R = 6371; // earth's mean radius in km
-  var dLat  = rad(p2.lat - p1.lat);
-  var dLong = rad(p2.lng - p1.lng);
+distHaversine = function (p1, p2, precision) {
+    var R = 6371; // earth's mean radius in km
+    var dLat = rad(p2.lat - p1.lat);
+    var dLong = rad(p2.lng - p1.lng);
 
-  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-          Math.cos(rad(p1.lat)) * Math.cos(rad(p2.lat)) * Math.sin(dLong/2) * Math.sin(dLong/2);
-  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  var d = R * c;
-  if ( precision == null ) {
-      return d.toFixed(3);
-  } else {
-      return d.toFixed(precision);
-  }
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(rad(p1.lat)) * Math.cos(rad(p2.lat)) * Math.sin(dLong / 2) * Math.sin(dLong / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    var d = R * c;
+    if (precision == null) {
+        return d.toFixed(3);
+    } else {
+        return d.toFixed(precision);
+    }
 }
 
 

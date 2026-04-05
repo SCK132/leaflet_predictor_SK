@@ -8,13 +8,14 @@
  *
  */
 
- var map = null;
+var map = null;
 
 // This function runs when the document object model is fully populated
 // and the page is loaded
-$(document).ready(function() {
+$(document).ready(function () {
     // Initialise the map canvas with parameters (lat, long, zoom-level)
-    initMap(-34.03, 138.66, 8);
+    // Default to Nanreku (33.1333, 132.5052)
+    initMap(33.1333, 132.5052, 10);
 
     // Populate the launch site list from sites.json
     populateLaunchSite();
@@ -27,7 +28,7 @@ $(document).ready(function() {
 
     // Populate the launch card time/date fields
     initLaunchCard();
-    
+
     // Check if an old prediction is to be displayed, and process if so
     //displayOld();
 
@@ -41,7 +42,7 @@ $(document).ready(function() {
     calc_init();
 
     // Run the prediction if it is provided in the URL.
-    if(params_provided) {
+    if (params_provided) {
         runPrediction();
     }
 });
@@ -53,48 +54,59 @@ function readURLParams() {
 
     var params_provided = false;
 
-    if(url.searchParams.has('launch_latitude')){
+    if (url.searchParams.has('launch_latitude')) {
         $("#lat").val(url.searchParams.get('launch_latitude'));
     }
-    if(url.searchParams.has('launch_longitude')){
+    if (url.searchParams.has('launch_longitude')) {
         $("#lon").val(url.searchParams.get('launch_longitude'));
     }
-    if(url.searchParams.has('launch_altitude')){
+    if (url.searchParams.has('launch_altitude')) {
         $("#initial_alt").val(url.searchParams.get('launch_altitude'));
     }
-    if(url.searchParams.has('ascent_rate')){
+    if (url.searchParams.has('ascent_rate')) {
         $("#ascent").val(url.searchParams.get('ascent_rate'));
     }
-    if(url.searchParams.has('descent_rate')){
+    if (url.searchParams.has('descent_rate')) {
         $("#drag").val(url.searchParams.get('descent_rate'));
     }
-    if(url.searchParams.has('profile')){
+    if (url.searchParams.has('profile')) {
         $("#flight_profile").val(url.searchParams.get('profile'));
     }
-    if(url.searchParams.has('prediction_type')){
+    if (url.searchParams.has('prediction_type')) {
         $("#prediction_type").val(url.searchParams.get('prediction_type'));
     }
-    if(url.searchParams.has('burst_altitude')){
+    if (url.searchParams.has('burst_altitude')) {
         $("#burst").val(url.searchParams.get('burst_altitude'));
     }
-    if(url.searchParams.has('float_altitude')){
+    if (url.searchParams.has('float_altitude')) {
         $("#burst").val(url.searchParams.get('float_altitude'));
     }
+    // New parameters for Collaboration
+    if (url.searchParams.has('api_source')) {
+        var source = url.searchParams.get('api_source');
+        $("#api_source").val(source);
+        if (source === 'custom') {
+            $("#api_custom_url").show(); // Ensure it's visible if custom
+        }
+    }
+    if (url.searchParams.has('api_custom_url')) {
+        $("#api_custom_url").val(url.searchParams.get('api_custom_url'));
+    }
 
-    if(url.searchParams.has('launch_datetime')){
+    if (url.searchParams.has('launch_datetime')) {
         var launch_datetime = url.searchParams.get('launch_datetime');
 
-        if(launch_datetime == "now"){
-            launch_moment = moment.utc();
+        if (launch_datetime == "now") {
+            launch_moment = moment.utc().add(9, 'hours');   // JSTへの変換
             time_was_now = true;
         } else {
-            launch_moment = moment.utc(launch_datetime);
+            launch_moment = moment.utc(launch_datetime).add(9, 'hours');    // JSTへの変換
         }
 
         $("#min").val(launch_moment.minutes());
         $("#hour").val(launch_moment.hours());
         $("#day").val(launch_moment.date());
-        $("#month").val(launch_moment.month()+1);
+        $("#month").val(launch_moment.month() + 1);
         $("#year").val(launch_moment.year());
 
         params_provided = true;
@@ -108,10 +120,10 @@ function readURLParams() {
 // then display the prediction
 function displayOld() {
     // Are we trying to display an old prediction?
-    if( window.location.hash != "" ) {
+    if (window.location.hash != "") {
         var ln = window.location.hash.split("=");
         var posteq = ln[1];
-        if ( posteq.length != 40 ) {
+        if (posteq.length != 40) {
             throwError("The supplied hashstring was not a valid UUID.");
             appendDebug("The hashstring was not the expected length");
         } else {
@@ -120,17 +132,17 @@ function displayOld() {
             appendDebug("Trying to populate form with scenario data...");
             populateFormByUUID(current_uuid);
             appendDebug("Trying to get progress JSON");
-            $.getJSON("preds/"+current_uuid+"/progress.json", 
-                function(progress) {
+            $.getJSON("preds/" + current_uuid + "/progress.json",
+                function (progress) {
                     appendDebug("Got progress JSON from server for UUID");
-                    if ( progress['error'] || !progress['pred_complete'] ) {
+                    if (progress['error'] || !progress['pred_complete']) {
                         appendDebug("The prediction was not completed"
                             + " correctly, quitting");
                     } else {
                         appendDebug("JSON said the prediction completed");
                         processCompletedPrediction(progress);
-                        writePredictionInfo(current_uuid, 
-                            progress['run_time'], 
+                        writePredictionInfo(current_uuid,
+                            progress['run_time'],
                             progress['dataset']);
                     }
                 });
@@ -154,8 +166,8 @@ function predSub() {
 // Make an AJAX request to the server and get the scenario information
 // for a given UUID, then populate the launch card with it
 function populateFormByUUID(pred_uuid) {
-    $.get("ajax.php", { "action":"getModelByUUID", "uuid":pred_uuid }, function(data) {
-        if ( !data.valid ) {
+    $.get("ajax.php", { "action": "getModelByUUID", "uuid": pred_uuid }, function (data) {
+        if (!data.valid) {
             appendDebug("Populating form by UUID failed");
             appendDebug("The server said the model it made was invalid");
         } else {
@@ -166,11 +178,11 @@ function populateFormByUUID(pred_uuid) {
             $("#hour").val(data.hour);
             // we need to make minutes be "04" instead of "4"
             var scenario_minute = data.minute;
-            if ( scenario_minute < 10 ) scenario_minute = "0" + scenario_minute;
+            if (scenario_minute < 10) scenario_minute = "0" + scenario_minute;
             $("#min").val(scenario_minute);
             $("#second").val(data.second);
             $("#day").val(data.day);
-            $("#month").attr("selectedIndex", data.month-1);
+            $("#month").attr("selectedIndex", data.month - 1);
             $("#year").val(data.year);
             // we have to use [] notation for
             // values that have -s in them
@@ -187,19 +199,24 @@ function populateFormByUUID(pred_uuid) {
 
 // Add information to the hashstring of the current window
 function addHashLink(link) {
-   var ln = "#!/" + link;
-   window.location = ln;
+    var ln = "#!/" + link;
+    window.location = ln;
 }
 
 // Clear the Launch Site dropdown and repopulate it with the information from
 // sites.json, as well as an "Other" option to open the saved locations window
 function populateLaunchSite() {
     $("#site > option").remove();
-    $.getJSON("sites.json", function(sites) {
-        $.each(sites, function(sitename, site) {
+    $.getJSON("sites.json", function (sites) {
+        var first = true;
+        $.each(sites, function (sitename, site) {
             $("<option>").attr("value", sitename).text(sitename).appendTo("#site");
         });
         $("<option>").attr("value", "Other").text("Other").appendTo("#site");
+
+        // Trigger update to set lat/lon to the first site (default)
+        changeLaunchSite();
+
         return true;
     });
     return true;
@@ -210,19 +227,19 @@ function populateLaunchSite() {
 // lat/lon and plots the new launch location otherwise
 function changeLaunchSite() {
     var selectedName = $("#site").val();
-    if ( selectedName == "Other" ) {
+    if (selectedName == "Other") {
         appendDebug("User requested locally saved launch sites");
-        if ( constructCookieLocationsTable("cusf_predictor") ) {
+        if (constructCookieLocationsTable("cusf_predictor")) {
             $("#location_save_local").fadeIn();
         }
     } else {
-        $.getJSON("sites.json", function(sites) {
-            $.each(sites, function(sitename, site) {
-               if ( selectedName == sitename ) {
+        $.getJSON("sites.json", function (sites) {
+            $.each(sites, function (sitename, site) {
+                if (selectedName == sitename) {
                     $("#lat").val(site.latitude);
                     $("#lon").val(site.longitude);
                     $("#initial_alt").val(site.altitude);
-               }
+                }
             });
             plotClick();
         });
@@ -253,28 +270,28 @@ function handlePred(pred_uuid) {
 
 // Get the CSV for a UUID and then pass it to the parseCSV() function
 function getCSV(pred_uuid) {
-    $.get("ajax.php", { "action":"getCSV", "uuid":pred_uuid }, function(data) {
-            if(data != null) {
-                appendDebug("Got JSON response from server for flight path,"
-                    + " parsing...");
-                if (parseCSV(data) ) {
-                    appendDebug("Parsing function returned successfully.");
-                    appendDebug("Done, AJAX functions quitting.");
-                } else {
-                    appendDebug("The parsing function failed.");
-                }
+    $.get("ajax.php", { "action": "getCSV", "uuid": pred_uuid }, function (data) {
+        if (data != null) {
+            appendDebug("Got JSON response from server for flight path,"
+                + " parsing...");
+            if (parseCSV(data)) {
+                appendDebug("Parsing function returned successfully.");
+                appendDebug("Done, AJAX functions quitting.");
             } else {
-                appendDebug("Server couldn't find a CSV for that UUID");
-                throwError("Sorry, we couldn't find the data for that UUID. "+
-                    "Please run another prediction.");
+                appendDebug("The parsing function failed.");
             }
+        } else {
+            appendDebug("Server couldn't find a CSV for that UUID");
+            throwError("Sorry, we couldn't find the data for that UUID. " +
+                "Please run another prediction.");
+        }
     }, 'json');
 }
 
 function firstJSONProgress(pred_uuid) {
     firstJSONProgressHandle = null;
     ajaxEventHandle = setInterval("getJSONProgress('"
-             + pred_uuid + "')", stdPeriod);
+        + pred_uuid + "')", stdPeriod);
     showStatusEventHandle = setTimeout(showPredictionStatus, showStatusDelay);
     getJSONProgress(pred_uuid);
 }
@@ -297,32 +314,32 @@ function showPredictionStatus() {
 // the AJAX request completes and decreasing polling interval
 function getJSONProgress(pred_uuid) {
     $.ajax({
-        url:"preds/"+pred_uuid+"/progress.json",
+        url: "preds/" + pred_uuid + "/progress.json",
         cache: false,
-        dataType:'json',
+        dataType: 'json',
         timeout: ajaxTimeout,
-        error: function(xhr, status, error) {
-            if ( status == "timeout" ) {
+        error: function (xhr, status, error) {
+            if (status == "timeout") {
                 appendDebug("Polling for progress JSON timed out");
                 // check that we haven't reached maximum allowed timeout
-                if ( ajaxTimeout < maxAjaxTimeout ) {
+                if (ajaxTimeout < maxAjaxTimeout) {
                     // if not, add the delta to the timeout value
                     newTimeout = ajaxTimeout + deltaAjaxTimeout;
                     appendDebug("Increasing AJAX timeout from " + ajaxTimeout
                         + "ms to " + newTimeout + "ms");
                     ajaxTimeout = newTimeout;
-                } else if ( ajaxTimeout != hlTimeout ) {
+                } else if (ajaxTimeout != hlTimeout) {
                     // otherwise, increase poll delay and timeout
-                    appendDebug("Reached maximum ajaxTimeout value of " 
+                    appendDebug("Reached maximum ajaxTimeout value of "
                         + maxAjaxTimeout);
                     clearInterval(ajaxEventHandle);
                     appendDebug("Switching to high latency mode");
-                    appendDebug("Setting polling interval to "+hlPeriod+"ms");
-                    appendDebug("Setting progress JSON timeout to " 
-                            + hlTimeout + "ms");
+                    appendDebug("Setting polling interval to " + hlPeriod + "ms");
+                    appendDebug("Setting progress JSON timeout to "
+                        + hlTimeout + "ms");
                     ajaxTimeout = hlTimeout;
                     ajaxEventHandle = setInterval("getJSONProgress('"
-                             + pred_uuid + "')", hlPeriod);
+                        + pred_uuid + "')", hlPeriod);
                 }
             }
         },
@@ -333,12 +350,12 @@ function getJSONProgress(pred_uuid) {
 function processCompletedPrediction(progress) {
     // parse the data
     getCSV(current_uuid);
-    appendDebug("Server gave a prediction run timestamp of " 
+    appendDebug("Server gave a prediction run timestamp of "
         + progress['run_time']);
     appendDebug("Server said it used the " + progress['dataset'] + " GFS Dataset");
 
     var warnings = "<b>The prediction completed, but with warnings!<br>" +
-               "The prediction may be unreliable!</b><br><br>";
+        "The prediction may be unreliable!</b><br><br>";
     for (var i = 0; i < progress['pred_output'].length; i++) {
         appendDebug("Pred output: " + progress['pred_output'][i]);
         warnings += progress['pred_output'][i] + "<br>";
@@ -362,16 +379,20 @@ function processCompletedPrediction(progress) {
 // If the prediction has completed, reset the GUI and display the new
 // prediction; otherwise update the progress window
 function processProgress(progress) {
-    if ( progress['error'] ) {
+    if (progress['error']) {
         clearInterval(ajaxEventHandle);
-        appendDebug("There was an error in running the prediction: " 
-                + progress['error']);
+        appendDebug("There was an error in running the prediction: "
+            + progress['error']);
         resetGUI();
         toggleWindow("scenario_template", "showHideDebug", "Show Debug", "Hide Debug", "show");
     } else {
         // get the progress of the wind data
-        if ( progress['pred_complete'] == true ) { // pred has finished
+        if (progress['pred_complete'] == true) { // pred has finished
             $("#prediction_status").html("Prediction finished.");
+            // トースト通知（Phase 3）
+            if (typeof showToast === 'function') {
+                showToast('予測完了', 'success', 3000);
+            }
             appendDebug("Server says: the predictor finished running.");
             appendDebug("Attempting to retrieve flight path from server");
             // reset the GUI
@@ -379,11 +400,11 @@ function processProgress(progress) {
             // stop polling for JSON
             clearInterval(ajaxEventHandle);
             processCompletedPrediction(progress);
-            addHashLink("uuid="+current_uuid);
-        } else if ( progress['pred_running'] != true ) {
+            addHashLink("uuid=" + current_uuid);
+        } else if (progress['pred_running'] != true) {
             $("#prediction_status").html("Waiting for predictor to run...");
             appendDebug("Server says: predictor not yet running...");
-        } else if ( progress['pred_running'] == true ) {
+        } else if (progress['pred_running'] == true) {
             $("#prediction_status").html("Predictor running...");
             appendDebug("Server says: predictor currently running");
         }
@@ -396,7 +417,7 @@ function processProgress(progress) {
 // Constructs the path, plots the launch/land/burst markers, writes the
 // prediction information to the scenario information window
 function parseCSV(lines) {
-    if( lines.length <= 0 ) {
+    if (lines.length <= 0) {
         appendDebug("The server returned an empty CSV file");
         return false;
     }
@@ -415,14 +436,14 @@ function parseCSV(lines) {
     var burst_time;
     var launch_time;
     var land_time;
-    $.each(lines, function(idx, line) {
+    $.each(lines, function (idx, line) {
         entry = line.split(',');
         // Check for a valid entry length
-        if(entry.length >= 4) {
-            var point = new google.maps.LatLng( parseFloat(entry[1]), 
-                parseFloat(entry[2]) );
+        if (entry.length >= 4) {
+            var point = new google.maps.LatLng(parseFloat(entry[1]),
+                parseFloat(entry[2]));
             // Get launch lat/lon
-            if ( idx == 0 ) {
+            if (idx == 0) {
                 launch_lat = entry[1];
                 launch_lon = entry[2];
                 launch_time = entry[0];
@@ -435,9 +456,9 @@ function parseCSV(lines) {
             land_lon = entry[2];
             land_time = entry[0];
             land_pt = point;
-            
+
             // Find the burst lat/lon/alt
-            if( parseFloat(entry[3]) > max_height ) {
+            if (parseFloat(entry[3]) > max_height) {
                 max_height = parseFloat(entry[3]);
                 burst_pt = point;
                 burst_lat = entry[1];
@@ -452,27 +473,27 @@ function parseCSV(lines) {
 
     appendDebug("Flight data parsed, creating map plot...");
     clearMapItems();
-    
+
     // Calculate range and time of flight
     var range = distHaversine(launch_pt, land_pt, 1);
     var flighttime = land_time - launch_time;
     var f_hours = Math.floor(flighttime / 3600);
     var f_minutes = Math.floor(((flighttime % 86400) % 3600) / 60);
-    if ( f_minutes < 10 ) f_minutes = "0"+f_minutes;
+    if (f_minutes < 10) f_minutes = "0" + f_minutes;
     flighttime = f_hours + "hr" + f_minutes;
     $("#cursor_pred_range").html(range);
     $("#cursor_pred_time").html(flighttime);
     cursorPredShow();
-    
+
     // Make some nice icons
     var launch_icon = new google.maps.MarkerImage(launch_img,
-        new google.maps.Size(10,10),
+        new google.maps.Size(10, 10),
         new google.maps.Point(0, 0),
         new google.maps.Point(5, 5)
     );
-    
+
     var land_icon = new google.maps.MarkerImage(land_img,
-        new google.maps.Size(10,10),
+        new google.maps.Size(10, 10),
         new google.maps.Point(0, 0),
         new google.maps.Point(5, 5)
     );
@@ -482,30 +503,30 @@ function parseCSV(lines) {
         new google.maps.Point(0, 0),
         new google.maps.Point(8, 8)
     );
-      
+
     var launch_marker = new google.maps.Marker({
         position: launch_pt,
         map: map,
         icon: launch_icon,
-        title: 'Balloon launch ('+launch_lat+', '+launch_lon+') at ' 
-            + POSIXtoHM(launch_time) + "UTC"
+        title: 'Balloon launch (' + launch_lat + ', ' + launch_lon + ') at '
+            + POSIXtoHM(launch_time) + "JST"
     });
 
     var land_marker = new google.maps.Marker({
         position: land_pt,
-        map:map,
+        map: map,
         icon: land_icon,
-        title: 'Predicted Landing ('+land_lat+', '+land_lon+') at ' 
-            + POSIXtoHM(land_time) + "UTC"
+        title: 'Predicted Landing (' + land_lat + ', ' + land_lon + ') at '
+            + POSIXtoHM(land_time) + "JST"
     });
 
     var pop_marker = new google.maps.Marker({
-            position: burst_pt,
-            map: map,
-            icon: burst_icon,
-            title: 'Balloon burst (' + burst_lat + ', ' + burst_lon 
-                + ' at altitude ' + max_height + 'm) at ' 
-                + POSIXtoHM(burst_time) + "UTC"
+        position: burst_pt,
+        map: map,
+        icon: burst_icon,
+        title: 'Balloon burst (' + burst_lat + ', ' + burst_lon
+            + ' at altitude ' + max_height + 'm) at '
+            + POSIXtoHM(burst_time) + "JST"
     });
 
     var path_polyline = new google.maps.Polyline({
@@ -532,14 +553,14 @@ function parseCSV(lines) {
 // Return the size of a given associative array
 function getAssocSize(arr) {
     var i = 0;
-    for ( j in arr ) {
+    for (j in arr) {
         i++;
     }
     return i;
 }
 
 function POSIXtoHM(timestamp, include_day) {
-    var ts = new Date(timestamp*1000);
+    var ts = new Date((parseFloat(timestamp) + 32400) * 1000);
     var s = "";
     var temp;
 
@@ -566,5 +587,5 @@ function POSIXtoHM(timestamp, include_day) {
     return s;
 }
 
-rad = function(x) {return x*Math.PI/180;}
+rad = function (x) { return x * Math.PI / 180; }
 

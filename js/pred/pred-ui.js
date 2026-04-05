@@ -14,17 +14,33 @@
 // Initialise the UI - this must be called on document ready
 function initUI() {
     // Make UI elements such as windows draggable
-    $("#input_form").draggable({containment: '#map_canvas', handle:
-        'img.handle', snap: '#map_canvas'});
-    $("#scenario_info").draggable({containment: '#map_canvas', handle:
-        'img.handle', snap: '#map_canvas'});
-    $("#location_save").draggable({containment: '#map_canvas', handle:
-        'img.handle', snap: '#map_canvas'});
-    $("#location_save_local").draggable({containment: '#map_canvas', handle:
-            'img.handle', snap: '#map_canvas'});
-    $("#burst-calc-wrapper").draggable({containment: '#map_canvas', handle:
-            'img.handle', snap: '#map_canvas'}); 
-    
+    // Check for mobile (simple width check or user agent)
+    var isMobile = window.innerWidth <= 768;
+
+    if (!isMobile) {
+        // Make UI elements such as windows draggable only on desktop
+        $("#input_form").draggable({
+            containment: '#map_canvas', handle:
+                'img.handle', snap: '#map_canvas'
+        });
+        $("#scenario_info").draggable({
+            containment: '#map_canvas', handle:
+                'img.handle', snap: '#map_canvas'
+        });
+        $("#location_save").draggable({
+            containment: '#map_canvas', handle:
+                'img.handle', snap: '#map_canvas'
+        });
+        $("#location_save_local").draggable({
+            containment: '#map_canvas', handle:
+                'img.handle', snap: '#map_canvas'
+        });
+        $("#burst-calc-wrapper").draggable({
+            containment: '#map_canvas', handle:
+                'img.handle', snap: '#map_canvas'
+        });
+    }
+
     // Activate buttons to jqueryui styling
     $("#run_pred_btn").button();
     $("#req_sub_btn").button();
@@ -38,6 +54,10 @@ function initUI() {
 function throwError(data) {
     $("#error_message").html(data);
     $("#error_window").fadeIn();
+    // トースト通知も表示（Phase 3）
+    if (typeof showToast === 'function') {
+        showToast(data.replace(/<[^>]*>/g, ''), 'error', 6000);
+    }
 }
 
 // Reset the GUI to a onLoad state ready for a new prediction to be shown
@@ -50,7 +70,7 @@ function resetGUI() {
         clearTimeout(firstJSONProgressHandle);
         firstJSONProgressHandle = null;
     }
-    
+
     $("#status_message").fadeOut(500);
     $("#error_window").fadeOut(500);
     $("#modelForm").find("input").attr("disabled", false);
@@ -92,7 +112,7 @@ function cursorPredShow() {
 // Append a line to the debug window and scroll the window to the bottom
 // Optional boolean second argument will clear the debug window if TRUE
 function appendDebug(appendage, clear) {
-    if ( clear == null ){
+    if (clear == null) {
         var curr = $("#debuginfo").html();
         curr += "<br>" + appendage;
         $("#debuginfo").html(curr);
@@ -105,32 +125,32 @@ function appendDebug(appendage, clear) {
 
 // A function to scroll a scrollable <div> all the way to the bottom
 function scrollToBottom(div_id) {
-    $("#"+div_id).stop().animate({scrollTop: $("#"+div_id)[0].scrollHeight});
+    $("#" + div_id).stop().animate({ scrollTop: $("#" + div_id)[0].scrollHeight });
 }
 
 // Show or hide GUI windows, can either "toggle", or force hide/show
 // Takes the window name, the linker ID, the event handlers for
 // 'onhide' and 'onshow', and a boolean 'force' parameter
 function toggleWindow(window_name, linker, onhide, onshow, force) {
-    $("#"+window_name+"").stop(true, true)
+    $("#" + window_name + "").stop(true, true)
 
-    if ( force == null ) {
-        if( $("#"+window_name).css('display') != "none" ){
-            $("#"+window_name+"").hide("slide", { direction: "down" }, 500);
-            $("#"+linker).html(onhide);
+    if (force == null) {
+        if ($("#" + window_name).css('display') != "none") {
+            $("#" + window_name + "").hide("slide", { direction: "down" }, 500);
+            $("#" + linker).html(onhide);
         } else {
-            $("#"+window_name).show("slide", { direction: "down" }, 500);
-            $("#"+linker).html(onshow);
+            $("#" + window_name).show("slide", { direction: "down" }, 500);
+            $("#" + linker).html(onshow);
         }
-    } else if ( force == "hide" ) {
-        if( $("#"+window_name).css('display') != "none" ){
-            $("#"+window_name+"").hide("slide", { direction: "down" }, 500);
-            $("#"+linker).html(onhide);
+    } else if (force == "hide") {
+        if ($("#" + window_name).css('display') != "none") {
+            $("#" + window_name + "").hide("slide", { direction: "down" }, 500);
+            $("#" + linker).html(onhide);
         }
-    } else if ( force == "show") {
-        if( $("#"+window_name).css('display') == "none" ){
-            $("#"+window_name).show("slide", { direction: "down" }, 500);
-            $("#"+linker).html(onshow);
+    } else if (force == "show") {
+        if ($("#" + window_name).css('display') == "none") {
+            $("#" + window_name).show("slide", { direction: "down" }, 500);
+            $("#" + linker).html(onshow);
         }
     } else {
         appendDebug("toggleWindow force parameter unrecognised");
