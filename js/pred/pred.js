@@ -225,12 +225,15 @@ function populateLaunchSite() {
 // The onchange handler for the launch locations dropdown menu, which opens
 // the saved locations window if "Other" was chosen; sets the launch card
 // lat/lon and plots the new launch location otherwise
-function changeLaunchSite() {
+function changeLaunchSite(callback) {
     var selectedName = $("#site").val();
     if (selectedName == "Other") {
         appendDebug("User requested locally saved launch sites");
         if (constructCookieLocationsTable("cusf_predictor")) {
             $("#location_save_local").fadeIn();
+        }
+        if (typeof callback === 'function') {
+            callback();
         }
     } else {
         $.getJSON("sites.json", function (sites) {
@@ -242,6 +245,9 @@ function changeLaunchSite() {
                 }
             });
             plotClick();
+            if (typeof callback === 'function') {
+                callback();
+            }
         });
     }
 }

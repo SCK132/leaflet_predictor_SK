@@ -1,5 +1,5 @@
-var CACHE_NAME = 'predictor-cache-v8';
-var TILE_CACHE_NAME = 'predictor-tiles-v8';
+var CACHE_NAME = 'predictor-cache-v9';
+var TILE_CACHE_NAME = 'predictor-tiles-v9';
 var urlsToCache = [
     './',
     './index.html',

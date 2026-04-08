@@ -489,9 +489,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var ensembleJsonBtn = document.getElementById('ensemble_export_json');
     if (ensembleJsonBtn) ensembleJsonBtn.addEventListener('click', exportEnsembleJSON);
 
-    // ヒートマップトグルボタン
-    var heatmapBtn = document.getElementById('ensemble_heatmap_toggle');
-    if (heatmapBtn) heatmapBtn.addEventListener('click', function () {
+    // 着地予測エリアトグルボタン
+    var redAreaBtn = document.getElementById('ensemble_heatmap_toggle');
+    if (redAreaBtn) redAreaBtn.addEventListener('click', function () {
         if (typeof toggleEnsembleHeatmap === 'function') toggleEnsembleHeatmap();
     });
 });

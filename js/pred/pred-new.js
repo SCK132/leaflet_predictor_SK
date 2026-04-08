@@ -33,27 +33,27 @@ function getSettings() {
     var min = parseInt($('#min').val());
 
     // JST -> UTC (JST is UTC+9)
-    var m = moment([year, month - 1, day, hour, min]); 
+    var m = moment([year, month - 1, day, hour, min]);
     s.launch_datetime = m.clone().subtract(9, 'hours').utc().format();
 
     s.launch_latitude = parseFloat($('#lat').val());
     s.launch_longitude = parseFloat($('#lon').val());
     if (s.launch_longitude < 0) s.launch_longitude += 360;
-    
+
     s.initial_alt = parseFloat($('#initial_alt').val());
     s.launch_altitude = s.initial_alt;
     s.ascent_rate = parseFloat($('#ascent').val());
     s.profile = $('#flight_profile').val();
     s.pred_type = $('#prediction_type').val();
     s.launch_site_name = $('#site option:selected').text();
-    
+
     if (s.profile == "standard_profile") {
         s.burst_altitude = parseFloat($('#burst').val());
         s.descent_rate = parseFloat($('#drag').val());
     } else {
         s.float_altitude = parseFloat($('#burst').val());
     }
-    
+
     // API source
     var source = $('#api_source').val();
     if (source === 'custom') {
@@ -61,7 +61,7 @@ function getSettings() {
     } else {
         s.api_url = "/api/v1/";
     }
-    
+
     return s;
 }
 
@@ -562,7 +562,7 @@ function computeSurfaceWind(tawhiriPrediction) {
         // UI更新
         $('#launch_surface_wind').text(avgSurface.toFixed(1));
         $('#launch_max_wind').text(maxWindSpeed.toFixed(1));
-        
+
         return avgSurface;
     } catch (e) {
         console.error("Error in computeSurfaceWind:", e);
@@ -687,11 +687,11 @@ function updatePosList(launch, burst, landing) {
     tbody.prepend(row); // Prepend to show newest first
 
     // Add click event for the newly created row
-    $("#tr_" + uniqueId).css("cursor", "pointer").on("click", function() {
+    $("#tr_" + uniqueId).css("cursor", "pointer").on("click", function () {
         // Find corresponding marker in history
-        for(var i=0; i<landing_history_markers.length; i++){
+        for (var i = 0; i < landing_history_markers.length; i++) {
             var m = landing_history_markers[i];
-            if(m.uniqueId === uniqueId){
+            if (m.uniqueId === uniqueId) {
                 map.panTo(m.getLatLng());
                 m.openPopup();
                 toggleHistoryPath(m);
@@ -708,20 +708,20 @@ function updatePosList(launch, burst, landing) {
  * @param {L.Marker} marker 
  */
 function toggleHistoryPath(marker) {
-    if(!marker.associatedPath) return;
+    if (!marker.associatedPath) return;
 
     var isVisible = marker.associatedPath.options.opacity > 0;
-    
+
     // Dim all other history paths first (optional but keeps map clean)
-    for(var i=0; i<landing_history_markers.length; i++) {
+    for (var i = 0; i < landing_history_markers.length; i++) {
         var other = landing_history_markers[i];
-        if(other.associatedPath) {
+        if (other.associatedPath) {
             other.associatedPath.setStyle({ opacity: 0, weight: 3 });
         }
     }
 
     // Toggle the targeted one
-    if(!isVisible) {
+    if (!isVisible) {
         marker.associatedPath.setStyle({ opacity: 0.8, weight: 4 });
         marker.associatedPath.bringToFront();
         $("#tr_" + marker.uniqueId).addClass("active-path");
@@ -862,7 +862,7 @@ function plotStandardPrediction(prediction) {
     }).bindPopup("<b>打ち上げ場所:</b> " + siteName_hist + "<br><b>打ち上げ時刻 (JST):</b> " + launchTimeJST + "<br><small>クリックで軌跡を表示</small>");
 
     historyMarker.associatedPath = history_path;
-    historyMarker.on('click', function() {
+    historyMarker.on('click', function () {
         toggleHistoryPath(historyMarker);
     });
     historyMarker.addTo(map);
@@ -910,8 +910,74 @@ function checkLandSea(lat, lon, rowId) {
     });
 }
 
+var _landSeaDecisionCache = {};
+var _landSeaDecisionCacheKeys = [];
+var LANDSEA_DECISION_CACHE_LIMIT = 400;
+
+function cacheLandSeaDecision(lat, lon, isWater) {
+    var key = lat.toFixed(4) + ',' + lon.toFixed(4);
+    _landSeaDecisionCache[key] = isWater;
+    _landSeaDecisionCacheKeys.push(key);
+    if (_landSeaDecisionCacheKeys.length > LANDSEA_DECISION_CACHE_LIMIT) {
+        var oldKey = _landSeaDecisionCacheKeys.shift();
+        delete _landSeaDecisionCache[oldKey];
+    }
+}
+
+function getCachedLandSeaDecision(lat, lon) {
+    var key = lat.toFixed(4) + ',' + lon.toFixed(4);
+    if (_landSeaDecisionCache.hasOwnProperty(key)) {
+        return _landSeaDecisionCache[key];
+    }
+    return undefined;
+}
+
+function monteCarloLandSeaAt(lat, lon) {
+    if (typeof LandSea === 'undefined' || !LandSea.isLand) return null;
+
+    var localResult = LandSea.isLand(lat, lon);
+    var nearCoast = LandSea.isNearCoast ? LandSea.isNearCoast(lat, lon) : true;
+
+    if (!nearCoast) {
+        if (localResult === true) return false;
+        if (localResult === false) return null;
+    }
+
+    if (localResult === null) return null;
+
+    var sampleCount = nearCoast ? 32 : 12;
+    var radiusDeg = nearCoast ? 0.010 : 0.006;
+    var landVotes = 0;
+    var seaVotes = 0;
+
+    for (var i = 0; i < sampleCount; i++) {
+        var theta = Math.random() * Math.PI * 2;
+        var r = radiusDeg * Math.sqrt(Math.random());
+        var sampleLat = lat + Math.sin(theta) * r;
+        var sampleLon = lon + Math.cos(theta) * r;
+        var sampleLand = LandSea.isLand(sampleLat, sampleLon);
+        if (sampleLand === true) landVotes++;
+        else if (sampleLand === false) seaVotes++;
+    }
+
+    var totalVotes = landVotes + seaVotes;
+    if (totalVotes === 0) return null;
+
+    var landRatio = landVotes / totalVotes;
+    var seaRatio = seaVotes / totalVotes;
+    if (landRatio >= 0.65) return false;
+    if (seaRatio >= 0.65) return true;
+    return null;
+}
+
 // 単発/13バリアント/放球NG判定で共有する海陸判定
 function classifyLandSeaAt(lat, lon, callback) {
+    var cached = getCachedLandSeaDecision(lat, lon);
+    if (typeof cached !== 'undefined') {
+        callback(cached);
+        return;
+    }
+
     var geoJsonResult = null;
     var nearCoast = true;
 
@@ -924,11 +990,24 @@ function classifyLandSeaAt(lat, lon, callback) {
     if (geoJsonResult === true && !nearCoast) {
         queryInlandWaterAt(lat, lon, function (inlandWater, err) {
             if (err) {
+                cacheLandSeaDecision(lat, lon, false);
                 callback(false);
                 return;
             }
-            callback(inlandWater === true ? true : false);
+            var result = inlandWater === true ? true : false;
+            cacheLandSeaDecision(lat, lon, result);
+            callback(result);
         });
+        return;
+    }
+
+    // ローカル GeoJSON が海を返した場合でも、山間部の欠損誤判定を避けるため
+    // BigDataCloud と内陸水域チェックで再確認する。
+    // 沿岸付近ではローカルGeoJSONのモンテカルロ近似を先に使って高速・高精度化
+    var monteCarloResult = monteCarloLandSeaAt(lat, lon);
+    if (monteCarloResult !== null) {
+        cacheLandSeaDecision(lat, lon, monteCarloResult);
+        callback(monteCarloResult);
         return;
     }
 
@@ -976,18 +1055,21 @@ function classifyLandSeaAt(lat, lon, callback) {
         }
 
         if (territorialEvidence || seaEvidence) {
+            cacheLandSeaDecision(lat, lon, true);
             callback(true);
             return;
         }
 
         // APIが陸、ローカルが海、かつ海岸付近なら海を優先
         if (!isWater && geoJsonResult === false && nearCoast && !inlandLandEvidence) {
+            cacheLandSeaDecision(lat, lon, true);
             callback(true);
             return;
         }
 
         // API上で海判定なら即海
         if (isWater) {
+            cacheLandSeaDecision(lat, lon, true);
             callback(true);
             return;
         }
@@ -995,20 +1077,26 @@ function classifyLandSeaAt(lat, lon, callback) {
         // APIが陸判定なら内陸水域を最終確認
         queryInlandWaterAt(lat, lon, function (inlandWater, err) {
             if (err) {
+                cacheLandSeaDecision(lat, lon, false);
                 callback(false);
                 return;
             }
-            callback(inlandWater === true ? true : false);
+            var result = inlandWater === true ? true : false;
+            cacheLandSeaDecision(lat, lon, result);
+            callback(result);
         });
     }).fail(function () {
         // API失敗時のフォールバック
         if (geoJsonResult === true) {
             queryInlandWaterAt(lat, lon, function (inlandWater, _err) {
-                callback(inlandWater === true ? true : false);
+                var result = inlandWater === true ? true : false;
+                cacheLandSeaDecision(lat, lon, result);
+                callback(result);
             });
             return;
         }
         if (geoJsonResult === false) {
+            cacheLandSeaDecision(lat, lon, true);
             callback(true);
             return;
         }
@@ -1088,9 +1176,9 @@ function updateLandSeaUI(isWater, rowId) {
     // トースト通知（Phase 3）
     if (typeof showToast === 'function') {
         if (isWater) {
-            showToast('🌊 着地予測: 海上に落下', 'warning', 5000);
+            showToast('着地予測: 海上に落下', 'warning', 5000);
         } else {
-            showToast('🏖️ 着地予測: 陸地に落下', 'success', 4000);
+            showToast('着地予測: 陸地に落下', 'success', 4000);
         }
     }
 }
@@ -1362,24 +1450,97 @@ var batchSites = [
     "一本松温泉あけぼの荘"
 ];
 
-function runBatchSimulation() {
-    var i = 0;
+var _batchSimulationState = {
+    active: false,
+    sites: [],
+    index: 0,
+    saveTimeout: null
+};
 
-    function runNext() {
-        if (i >= batchSites.length) return;
+function clearBatchSimulationState() {
+    if (_batchSimulationState.saveTimeout) {
+        clearTimeout(_batchSimulationState.saveTimeout);
+        _batchSimulationState.saveTimeout = null;
+    }
+    _batchSimulationState.active = false;
+    _batchSimulationState.sites = [];
+    _batchSimulationState.index = 0;
+}
 
-        var site = batchSites[i];
-        $("#site").val(site).change(); // Set site and trigger change to update coords
+function queueNextBatchSite() {
+    if (!_batchSimulationState.active) return;
 
-        // Small delay to allow UI update and prevent API rate limiting issues
-        setTimeout(function () {
-            runPrediction();
-            i++;
-            setTimeout(runNext, 1000); // 1s delay between runs
-        }, 200);
+    if (_batchSimulationState.saveTimeout) {
+        clearTimeout(_batchSimulationState.saveTimeout);
+        _batchSimulationState.saveTimeout = null;
     }
 
-    runNext();
+    _batchSimulationState.index++;
+    if (_batchSimulationState.index >= _batchSimulationState.sites.length) {
+        clearBatchSimulationState();
+        if (typeof showToast === 'function') {
+            showToast('南レク一括計算が完了しました', 'success', 4000);
+        }
+        return;
+    }
+
+    setTimeout(function () {
+        runNextBatchSite();
+    }, 1500);
+}
+
+function runNextBatchSite() {
+    if (!_batchSimulationState.active) return;
+
+    if (_batchSimulationState.index >= _batchSimulationState.sites.length) {
+        clearBatchSimulationState();
+        return;
+    }
+
+    var site = _batchSimulationState.sites[_batchSimulationState.index];
+    $("#site").val(site);
+
+    var startPrediction = function () {
+        if (typeof showToast === 'function') {
+            showToast('一括計算中: ' + site, 'info', 1500);
+        }
+
+        if (_batchSimulationState.saveTimeout) {
+            clearTimeout(_batchSimulationState.saveTimeout);
+        }
+
+        _batchSimulationState.saveTimeout = setTimeout(function () {
+            appendDebug('南レク一括: ' + site + ' の保存待ちがタイムアウトしました。次の地点へ進みます。');
+            queueNextBatchSite();
+        }, 240000);
+
+        runPrediction();
+    };
+
+    if (typeof changeLaunchSite === 'function') {
+        changeLaunchSite(startPrediction);
+    } else {
+        startPrediction();
+    }
+}
+
+function runBatchSimulation() {
+    if (_batchSimulationState.active) {
+        if (typeof showToast === 'function') {
+            showToast('南レク一括計算は実行中です', 'warning', 2500);
+        }
+        return;
+    }
+
+    _batchSimulationState.active = true;
+    _batchSimulationState.sites = batchSites.slice();
+    _batchSimulationState.index = 0;
+
+    if (typeof showToast === 'function') {
+        showToast('南レク一括計算を開始します', 'info', 2500);
+    }
+
+    runNextBatchSite();
 }
 
 // ============================================================
@@ -1453,11 +1614,10 @@ function run13VariantEnsemble(settings, api_url) {
 
     // グローバル結果をリセット
     _ensembleResults = [];
-    // ヒートマップを非表示
-    if (_ensembleHeatLayer && map.hasLayer(_ensembleHeatLayer)) {
-        map.removeLayer(_ensembleHeatLayer);
-        _ensembleHeatLayer = null;
-        _ensembleHeatVisible = false;
+    // 着地予測エリアは次回描画時に再生成されるため、既存レイヤーだけ先に消す
+    if (map_items && map_items['13var_hull']) {
+        try { map.removeLayer(map_items['13var_hull']); } catch (_e) { }
+        delete map_items['13var_hull'];
     }
 
     // D4: アンサンブル統計パネルを表示 (Launch Window 等からの呼び出し用)
@@ -1546,7 +1706,7 @@ function run13VariantEnsemble(settings, api_url) {
 
                     // Update existing row in Ehime results table
                     var rowId = "ehime_row_" + idx;
-                    var rowContent = 
+                    var rowContent =
                         '<td>' + (idx + 1) + '</td>' +
                         '<td><span class="color-swatch" style="background:' + color + ';"></span></td>' +
                         '<td><b>' + variant.label + '</b></td>' +
@@ -1621,12 +1781,12 @@ function run13VariantEnsemble(settings, api_url) {
                         if (jqXHR.responseJSON && jqXHR.responseJSON.error) {
                             errDesc = jqXHR.responseJSON.error.description || '';
                         }
-                    } catch(_e) {}
+                    } catch (_e) { }
                     appendDebug("13-Var " + variant.label + " failed: " + errDesc);
                     // テーブル行を「エラー」表示に更新
                     var rowId = "ehime_row_" + idx;
                     var shortErr = errDesc ? errDesc.substring(0, 40) : '不明なエラー';
-                    var rowContent = 
+                    var rowContent =
                         '<td>' + (idx + 1) + '</td>' +
                         '<td><span class="color-swatch" style="background:' + color + ';"></span></td>' +
                         '<td><b>' + variant.label + '</b></td>' +
@@ -1738,7 +1898,34 @@ function plot13VariantPath(prediction, index, variant, color, settings, rawData)
         $("#cursor_pred_time").html(flighttime);
         cursorPredShow();
 
-        map.fitBounds(path_polyline.getBounds());
+        var bounds = path_polyline.getBounds();
+        if (bounds && bounds.isValid()) {
+            map.fitBounds(bounds);
+        } else {
+            map.panTo(landing.latlng);
+        }
+    }
+}
+
+function bindEhimeVariantSelection(targetIndex, rowSelector, cardSelector, getMarkerFn, onSelect) {
+    var selectVariant = function () {
+        var marker = typeof getMarkerFn === 'function' ? getMarkerFn(targetIndex) : null;
+        if (marker && typeof marker.getLatLng === 'function') {
+            map.panTo(marker.getLatLng());
+            if (typeof marker.openPopup === 'function') marker.openPopup();
+        }
+        if (typeof onSelect === 'function') {
+            onSelect(targetIndex, marker);
+        } else if (typeof focusEhimeVariant === 'function') {
+            focusEhimeVariant(targetIndex);
+        }
+    };
+
+    if (rowSelector) {
+        $(rowSelector).css('cursor', 'pointer').off('click').on('click', selectVariant);
+    }
+    if (cardSelector) {
+        $(cardSelector).css('cursor', 'pointer').off('click').on('click', selectVariant);
     }
 }
 
@@ -1774,6 +1961,11 @@ function focusEhimeVariant(targetIdx) {
 
 function compute13VarStatistics(landingPoints) {
     if (landingPoints.length === 0) return;
+
+    if (map_items && map_items['13var_mean_marker']) {
+        try { map.removeLayer(map_items['13var_mean_marker']); } catch (_e) { }
+        delete map_items['13var_mean_marker'];
+    }
 
     // Mean landing point
     var sumLat = 0, sumLng = 0;
@@ -1818,6 +2010,11 @@ function drawEnsembleHull(landingPoints) {
     if (landingPoints.length < 3) return;
 
     try {
+        if (map_items && map_items['13var_hull']) {
+            try { map.removeLayer(map_items['13var_hull']); } catch (_e) { }
+            delete map_items['13var_hull'];
+        }
+
         // Create GeoJSON features for Turf.js
         var features = landingPoints.map(function (p) {
             return turf.point([p.lng, p.lat]);
@@ -1841,6 +2038,10 @@ function drawEnsembleHull(landingPoints) {
             }).addTo(map);
             hullPolygon.bindPopup("<b>着地予測エリア</b><br>コンベックスハル (凸包)");
             map_items['13var_hull'] = hullPolygon;
+
+            if (typeof _ensembleHullVisible !== 'undefined' && !_ensembleHullVisible) {
+                try { map.removeLayer(hullPolygon); } catch (_e) { }
+            }
         }
     } catch (e) {
         console.log("Convex hull error: " + e.message);
@@ -1886,105 +2087,85 @@ function updateEnsembleWaterStats(landingPoints, total) {
     if (determined > 0) {
         var landPct = ((landCount / determined) * 100).toFixed(0);
         var seaPct = ((waterCount / determined) * 100).toFixed(0);
+        // 通常のパーセンテージ表示
         $("#ensemble_land_pct").text(landPct + "%");
         $("#ensemble_sea_pct").text(seaPct + "%");
     }
+
 }
 
-// ============================================================
-// ヒートマップ機能 (Leaflet.heat)
-// ============================================================
+var _ensembleHullVisible = true;
 
-/**
- * 着地確率ヒートマップの表示/非表示切替
- */
+function updateEnsembleHullToggleText() {
+    var button = document.getElementById('ensemble_heatmap_toggle');
+    if (!button) return;
+    button.textContent = _ensembleHullVisible ? '着地範囲 ON' : '着地範囲 OFF';
+}
+
 function toggleEnsembleHeatmap() {
-    if (_ensembleHeatVisible && _ensembleHeatLayer) {
-        // 非表示にする
-        map.removeLayer(_ensembleHeatLayer);
-        _ensembleHeatVisible = false;
-        $("#ensemble_heatmap_toggle").text("🔥 ヒートマップ");
-        if (typeof showToast === 'function') showToast('ヒートマップを非表示', 'info', 2000);
-    } else {
-        // 表示する
-        drawEnsembleHeatmap();
-    }
-}
-
-/**
- * アンサンブル結果からヒートマップを描画
- * ポイント数が少ない場合(13バリアント等)は、ガウスカーネルで補間した
- * 仮想ポイントを追加して滑らかなヒートマップを生成する
- */
-function drawEnsembleHeatmap() {
-    if (_ensembleResults.length === 0) {
-        if (typeof showToast === 'function') showToast('アンサンブル結果がありません', 'warning', 3000);
+    var hull = map_items && map_items['13var_hull'];
+    if (!hull) {
+        if (typeof showToast === 'function') {
+            showToast('着地予測エリアを表示できる結果がありません', 'warning', 2500);
+        }
         return;
     }
 
-    // 既存ヒートマップレイヤーを削除
-    if (_ensembleHeatLayer && map.hasLayer(_ensembleHeatLayer)) {
-        map.removeLayer(_ensembleHeatLayer);
+    if (_ensembleHullVisible) {
+        try { map.removeLayer(hull); } catch (_e) { }
+        _ensembleHullVisible = false;
+        updateEnsembleHullToggleText();
+        if (typeof showToast === 'function') showToast('着地予測エリアを非表示', 'info', 2000);
+        return;
     }
 
-    // 着地点を収集
-    var rawPoints = [];
-    for (var i = 0; i < _ensembleResults.length; i++) {
-        rawPoints.push([_ensembleResults[i].lat, _ensembleResults[i].lng]);
-    }
+    try { hull.addTo(map); } catch (_e) { }
+    _ensembleHullVisible = true;
+    updateEnsembleHullToggleText();
+    if (typeof showToast === 'function') showToast('着地予測エリアを表示', 'success', 2000);
+}
 
-    // KDE: ガウスカーネル密度推定で仮想ポイントを生成
-    // ポイント数が少ない場合に滑らかなヒートマップを生成する
-    var heatPoints = [];
-    var bandwidth = 0.005; // ~500m (度単位)
-    var samples = 50;      // 各着地点周りのサンプル数
+function drawEnsembleHeatmap() {
+    toggleEnsembleHeatmap();
+}
 
-    if (rawPoints.length <= 20) {
-        // ポイントが少ない場合: KDE補間
-        for (var pi = 0; pi < rawPoints.length; pi++) {
-            var cLat = rawPoints[pi][0];
-            var cLng = rawPoints[pi][1];
-            // 中心点（重み高）
-            heatPoints.push([cLat, cLng, 1.0]);
-            // 周囲にサンプルポイントを追加
-            for (var si = 0; si < samples; si++) {
-                // Box-Muller変換でガウス分布
-                var u1 = Math.random() || 0.001;
-                var u2 = Math.random();
-                var z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-                var z1 = Math.sqrt(-2.0 * Math.log(u1)) * Math.sin(2.0 * Math.PI * u2);
-                var sLat = cLat + z0 * bandwidth;
-                var sLng = cLng + z1 * bandwidth;
-                var dist = Math.sqrt(z0 * z0 + z1 * z1);
-                var weight = Math.exp(-0.5 * dist * dist); // ガウスカーネルの重み
-                heatPoints.push([sLat, sLng, weight * 0.5]);
-            }
-        }
-    } else {
-        // ポイントが多い場合: そのまま使用
-        for (var pi = 0; pi < rawPoints.length; pi++) {
-            heatPoints.push([rawPoints[pi][0], rawPoints[pi][1], 1.0]);
-        }
-    }
+function toFiniteNumber(value) {
+    var num = Number(value);
+    return isFinite(num) ? num : null;
+}
 
-    // Leaflet.heat ヒートマップレイヤーを作成
-    _ensembleHeatLayer = L.heatLayer(heatPoints, {
-        radius: 25,
-        blur: 20,
-        maxZoom: 15,
-        max: 1.0,
-        gradient: {
-            0.0: 'blue',
-            0.25: 'cyan',
-            0.5: 'lime',
-            0.75: 'yellow',
-            1.0: 'red'
-        }
-    }).addTo(map);
+function normalizeEhimeResultRecord(raw) {
+    if (!raw) return null;
 
-    _ensembleHeatVisible = true;
-    $("#ensemble_heatmap_toggle").text("ヒートマップ非表示");
-    if (typeof showToast === 'function') showToast('着地確率ヒートマップを表示', 'success', 2000);
+    var idx = parseInt(raw.index, 10);
+    if (!isFinite(idx) || idx < 0) return null;
+
+    var lat = toFiniteNumber(raw.lat);
+    var lng = toFiniteNumber(raw.lng);
+    if (lat === null || lng === null) return null;
+
+    return {
+        index: idx,
+        label: raw.label || '-',
+        description: raw.description || '-',
+        flight_path: Array.isArray(raw.flight_path) ? raw.flight_path : [],
+        lat: lat,
+        lng: lng,
+        launch_datetime: raw.launch_datetime,
+        burst_datetime: raw.burst_datetime,
+        landing_datetime: raw.landing_datetime,
+        ascent_rate: toFiniteNumber(raw.ascent_rate),
+        descent_rate: toFiniteNumber(raw.descent_rate),
+        burst_altitude: toFiniteNumber(raw.burst_altitude),
+        flight_time_sec: toFiniteNumber(raw.flight_time_sec),
+        flight_time_str: raw.flight_time_str,
+        launch_lat: toFiniteNumber(raw.launch_lat),
+        launch_lng: toFiniteNumber(raw.launch_lng),
+        burst_lat: toFiniteNumber(raw.burst_lat),
+        burst_lng: toFiniteNumber(raw.burst_lng),
+        burst_alt: toFiniteNumber(raw.burst_alt),
+        isWater: raw.isWater
+    };
 }
 
 // ============================================================
@@ -2028,7 +2209,7 @@ function clearEhimeHistoryCache() {
     _ehimeHistory = [];
     try {
         localStorage.removeItem(EHIME_HISTORY_KEY);
-    } catch (_e) {}
+    } catch (_e) { }
     renderEhimeHistory();
 }
 
@@ -2039,9 +2220,9 @@ function saveEhimeHistory(landingPoints, settings) {
     try {
         var lt = moment(settings.launch_datetime).utcOffset(9 * 60);
         launchTimeJST = lt.format('MM/DD HH:mm');
-    } catch(e) {}
+    } catch (e) { }
 
-    var landCount  = 0;
+    var landCount = 0;
     var waterCount = 0;
     for (var i = 0; i < landingPoints.length; i++) {
         if (landingPoints[i].isWater === false) landCount++;
@@ -2053,9 +2234,16 @@ function saveEhimeHistory(landingPoints, settings) {
         time: launchTimeJST,
         siteName: settings.launch_site_name || $('#site option:selected').text() || '-',
         launch_datetime: settings.launch_datetime,
+        launch_lat: settings.launch_latitude,
+        launch_lng: settings.launch_longitude,
+        initial_alt: settings.initial_alt,
         ascent: settings.ascent_rate || 0,
         burst: settings.burst_altitude || 0,
         descent: settings.descent_rate || 0,
+        profile: settings.profile || '',
+        prediction_type: settings.pred_type || '',
+        api_source: $('#api_source').val() || '',
+        api_custom_url: $('#api_custom_url').val() || '',
         successCount: landingPoints.length,
         landCount: landCount,
         waterCount: waterCount,
@@ -2105,31 +2293,123 @@ function saveEhimeHistory(landingPoints, settings) {
     persistEhimeHistory();
 
     renderEhimeHistory();
+
+    if (_batchSimulationState && _batchSimulationState.active) {
+        queueNextBatchSite();
+    }
+}
+
+function restoreEhimeHistorySettings(target) {
+    if (!target) return;
+
+    if (target.launch_datetime) {
+        var launchMoment = moment(target.launch_datetime).utcOffset(9 * 60);
+        $('#year').val(launchMoment.year());
+        $('#month').val(launchMoment.month() + 1).change();
+        $('#day').val(launchMoment.date());
+        $('#hour').val(launchMoment.hours());
+        $('#min').val(launchMoment.minutes());
+    }
+
+    if (typeof target.launch_lat === 'number') $('#lat').val(target.launch_lat);
+    if (typeof target.launch_lng === 'number') $('#lon').val(target.launch_lng);
+    if (typeof target.initial_alt === 'number') $('#initial_alt').val(target.initial_alt);
+    if (typeof target.ascent === 'number') $('#ascent').val(target.ascent);
+    if (typeof target.burst === 'number') $('#burst').val(target.burst);
+    if (typeof target.descent === 'number') $('#drag').val(target.descent);
+
+    if (target.profile) {
+        $('#flight_profile').val(target.profile).change();
+    }
+    if (target.prediction_type) {
+        $('#prediction_type').val(target.prediction_type).change();
+    }
+    if (target.api_source) {
+        $('#api_source').val(target.api_source).change();
+    }
+    if (typeof target.api_custom_url === 'string' && target.api_custom_url) {
+        $('#api_custom_url').val(target.api_custom_url);
+    }
+
+    if (target.siteName) {
+        var siteSelect = document.getElementById('site');
+        if (siteSelect) {
+            var matched = false;
+            for (var i = 0; i < siteSelect.options.length; i++) {
+                var opt = siteSelect.options[i];
+                if (opt.text === target.siteName || opt.value === target.siteName) {
+                    siteSelect.selectedIndex = i;
+                    // $(siteSelect).change(); // 履歴再表示時の非同期クリアを防ぐため無効化
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                // $('#site').trigger('change'); // 履歴再表示時の非同期クリアを防ぐため無効化
+            }
+        }
+    }
 }
 
 function replayEhimeHistory(historyId) {
+    var normalizedHistoryId = parseInt(historyId, 10);
     var target = null;
     for (var i = 0; i < _ehimeHistory.length; i++) {
-        if (_ehimeHistory[i].id === historyId) {
+        var currentId = parseInt(_ehimeHistory[i].id, 10);
+        if ((!isNaN(normalizedHistoryId) && currentId === normalizedHistoryId) || String(_ehimeHistory[i].id) === String(historyId)) {
             target = _ehimeHistory[i];
             break;
         }
     }
     if (!target || !Array.isArray(target.results) || target.results.length === 0) {
         if (typeof showToast === 'function') {
-            showToast('この履歴には再表示データがありません', 'warning', 3000);
+            showToast('履歴データが不足しているため同条件で再計算します', 'warning', 4000);
+        }
+        clearMapItems();
+        restoreEhimeHistorySettings(target);
+        $("#ensemble_stats_panel").show();
+        if (typeof switchTab === 'function') switchTab('results');
+
+        if (typeof run13VariantEnsemble === 'function') {
+            var fallbackSettings = {
+                launch_datetime: target.launch_datetime,
+                launch_latitude: target.launch_lat,
+                launch_longitude: target.launch_lng,
+                initial_alt: target.initial_alt,
+                launch_altitude: target.initial_alt,
+                ascent_rate: target.ascent,
+                burst_altitude: target.burst,
+                descent_rate: target.descent,
+                profile: target.profile || 'standard_profile',
+                pred_type: 'ensemble_13var',
+                launch_site_name: target.siteName || $('#site option:selected').text() || '-'
+            };
+            setTimeout(function () {
+                run13VariantEnsemble(fallbackSettings, target.api_source === 'custom' ? target.api_custom_url : (target.api_source === 'local' ? '/api/v1/' : 'https://api.v2.sondehub.org/tawhiri'));
+            }, 0);
         }
         return;
     }
 
     clearMapItems();
+    restoreEhimeHistorySettings(target);
     $("#ensemble_stats_panel").show();
     if (typeof switchTab === 'function') switchTab('results');
 
     $("#ehime_results_body").empty();
     $("#ehime_results_mobile").empty();
 
-    var sorted = target.results.slice().sort(function (a, b) { return a.index - b.index; });
+    var sorted = target.results.slice().map(function (r) {
+        return normalizeEhimeResultRecord(r);
+    }).filter(function (r) {
+        return !!r;
+    }).sort(function (a, b) { return a.index - b.index; });
+    if (sorted.length === 0) {
+        if (typeof showToast === 'function') {
+            showToast('この履歴は再表示できるデータが不足しています', 'warning', 3000);
+        }
+        return;
+    }
     var landingPoints = [];
     var variantColors = [
         '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
@@ -2137,28 +2417,44 @@ function replayEhimeHistory(historyId) {
         '#469990', '#dcbeff', '#9A6324'
     ];
 
-    _ensembleResults = sorted;
+    _ensembleResults = sorted.slice();
+    var markerBounds = [];
 
     for (var j = 0; j < sorted.length; j++) {
         var r = sorted[j];
-        var color = variantColors[j % variantColors.length];
+        var color = variantColors[r.index % variantColors.length];
         var launchMoment = r.launch_datetime ? moment(r.launch_datetime) : moment();
         var burstMoment = r.burst_datetime ? moment(r.burst_datetime) : launchMoment.clone();
         var landingMoment = r.landing_datetime ? moment(r.landing_datetime) : launchMoment.clone();
+        var launchLat = (r.launch_lat !== null) ? r.launch_lat : toFiniteNumber(target.launch_lat);
+        var launchLng = (r.launch_lng !== null) ? r.launch_lng : toFiniteNumber(target.launch_lng);
+        var landingLat = r.lat;
+        var landingLng = r.lng;
+        var ascentRate = (r.ascent_rate !== null) ? r.ascent_rate : (toFiniteNumber(target.ascent) || 0);
+        var descentRate = (r.descent_rate !== null) ? r.descent_rate : (toFiniteNumber(target.descent) || 0);
+        var burstAltitude = (r.burst_altitude !== null) ? r.burst_altitude : (toFiniteNumber(target.burst) || 0);
+        var flightTimeSec = (r.flight_time_sec !== null) ? r.flight_time_sec : 0;
+        var landSeaFlag = (r.isWater === true) ? 'blue' : (r.isWater === false ? 'green' : 'gray');
+        var landSeaText = (r.isWater === true) ? '海 (Sea)' : (r.isWater === false ? '陸 (Land)' : '不明');
+
+        if (launchLat === null || launchLng === null) {
+            launchLat = landingLat;
+            launchLng = landingLng;
+        }
 
         var prediction = {
             flight_path: r.flight_path || [],
-            flight_time: r.flight_time_sec || 0,
+            flight_time: flightTimeSec,
             launch: {
-                latlng: L.latLng(r.launch_lat || 0, r.launch_lng || 0),
+                latlng: L.latLng(launchLat, launchLng),
                 datetime: launchMoment
             },
             burst: {
-                latlng: L.latLng(r.burst_lat || 0, r.burst_lng || 0, r.burst_alt || 0),
+                latlng: L.latLng((typeof r.burst_lat === 'number') ? r.burst_lat : launchLat, (typeof r.burst_lng === 'number') ? r.burst_lng : launchLng, (typeof r.burst_alt === 'number') ? r.burst_alt : burstAltitude),
                 datetime: burstMoment
             },
             landing: {
-                latlng: L.latLng(r.lat, r.lng),
+                latlng: L.latLng(landingLat, landingLng),
                 datetime: landingMoment
             }
         };
@@ -2169,46 +2465,52 @@ function replayEhimeHistory(historyId) {
             { label: r.label, desc: r.description },
             color,
             {
-                ascent_rate: r.ascent_rate,
-                descent_rate: r.descent_rate,
-                burst_altitude: r.burst_altitude
+                ascent_rate: ascentRate,
+                descent_rate: descentRate,
+                burst_altitude: burstAltitude
             }
         );
 
-        var rowHtml = '<tr id="ehime_row_' + r.index + '">' +
+        var rowHtml = '<tr id="ehime_row_' + r.index + '" data-variant-index="' + r.index + '">' +
             '<td>' + (r.index + 1) + '</td>' +
             '<td><span class="color-swatch" style="background:' + color + ';"></span></td>' +
-            '<td><b>' + r.label + '</b></td>' +
-            '<td>' + r.description + '</td>' +
-            '<td>' + r.lat.toFixed(4) + '</td>' +
-            '<td>' + r.lng.toFixed(4) + '</td>' +
-            '<td>' + r.ascent_rate.toFixed(1) + '</td>' +
-            '<td>' + r.descent_rate.toFixed(1) + '</td>' +
-            '<td>' + r.burst_altitude.toFixed(0) + '</td>' +
-            '<td>' + Math.floor((r.flight_time_sec || 0) / 60) + '</td>' +
-            '<td style="color:' + (r.isWater ? 'blue' : 'green') + ';">' + (r.isWater ? '海 (Sea)' : '陸 (Land)') + '</td>' +
+            '<td><b>' + (r.label || '-') + '</b></td>' +
+            '<td>' + (r.description || '-') + '</td>' +
+            '<td>' + landingLat.toFixed(4) + '</td>' +
+            '<td>' + landingLng.toFixed(4) + '</td>' +
+            '<td>' + ascentRate.toFixed(1) + '</td>' +
+            '<td>' + descentRate.toFixed(1) + '</td>' +
+            '<td>' + burstAltitude.toFixed(0) + '</td>' +
+            '<td>' + Math.floor(flightTimeSec / 60) + '</td>' +
+            '<td style="color:' + landSeaFlag + ';">' + landSeaText + '</td>' +
             '</tr>';
         $("#ehime_results_body").append(rowHtml);
 
         var mobileLandText = (r.isWater === true) ? '海' : (r.isWater === false ? '陸' : '不明');
-        var card = '<div class="ehime-card' + (r.index === 0 ? ' base' : '') + '" id="ehime_card_' + r.index + '">' +
+        var card = '<div class="ehime-card' + (r.index === 0 ? ' base' : '') + '" id="ehime_card_' + r.index + '" data-variant-index="' + r.index + '">' +
             '<span class="swatch" style="background:' + color + ';"></span>' +
-            '<span class="label">' + r.label + '</span> — ' + r.description +
+            '<span class="label">' + (r.label || '-') + '</span> — ' + (r.description || '-') +
             '<div class="meta">' +
-            '<span>緯度: ' + r.lat.toFixed(4) + '</span>' +
-            '<span>経度: ' + r.lng.toFixed(4) + '</span>' +
-            '<span>上昇: ' + r.ascent_rate.toFixed(1) + '</span>' +
-            '<span>下降: ' + r.descent_rate.toFixed(1) + '</span>' +
-            '<span>破裂: ' + r.burst_altitude.toFixed(0) + 'm</span>' +
-            '<span>飛行: ' + (r.flight_time_str || '-') + '</span>' +
+            '<span>緯度: ' + landingLat.toFixed(4) + '</span>' +
+            '<span>経度: ' + landingLng.toFixed(4) + '</span>' +
+            '<span>上昇: ' + ascentRate.toFixed(1) + '</span>' +
+            '<span>下降: ' + descentRate.toFixed(1) + '</span>' +
+            '<span>破裂: ' + burstAltitude.toFixed(0) + 'm</span>' +
+            '<span>飛行: ' + (r.flight_time_str || (Math.floor(flightTimeSec / 60) + '分')) + '</span>' +
             '<span>' + mobileLandText + '</span>' +
             '</div></div>';
         $("#ehime_results_mobile").append(card);
 
+        bindEhimeVariantSelection(r.index, '#ehime_row_' + r.index, '#ehime_card_' + r.index, function (idx) {
+            return map_items['13var_land_' + idx];
+        });
+
+        markerBounds.push([landingLat, landingLng]);
+
         landingPoints.push({
-            lat: r.lat,
-            lng: r.lng,
-            label: r.label,
+            lat: landingLat,
+            lng: landingLng,
+            label: r.label || '-',
             isWater: r.isWater
         });
     }
@@ -2217,6 +2519,26 @@ function replayEhimeHistory(historyId) {
     $("#ensemble_completed").text(sorted.length);
     updateEnsembleWaterStats(landingPoints, sorted.length);
     compute13VarStatistics(landingPoints);
+
+    if (markerBounds.length > 0) {
+        var bounds = L.latLngBounds(markerBounds);
+        if (bounds.isValid()) {
+            map.fitBounds(bounds.pad(0.2));
+        }
+        var baseMarker = map_items['13var_land_0'];
+        if (!baseMarker) {
+            var firstMarker = map_items['13var_land_' + sorted[0].index];
+            if (firstMarker && typeof firstMarker.getLatLng === 'function') {
+                map.panTo(firstMarker.getLatLng());
+                if (typeof firstMarker.openPopup === 'function') firstMarker.openPopup();
+                focusEhimeVariant(sorted[0].index);
+            }
+        } else {
+            focusEhimeVariant(0);
+        }
+    }
+
+    updateEnsembleHullToggleText();
     $("#prediction_status").html("13バリアント履歴を再表示");
 
     if (typeof showToast === 'function') {
@@ -2233,29 +2555,43 @@ function renderEhimeHistory() {
         return;
     }
 
-    var html = '<table style="width:100%; font-size:11px; border-collapse:collapse;">' +
-        '<tr style="border-bottom:1px solid var(--border-color);">' +
-        '<th>時刻</th><th>場所</th><th>上昇</th><th>下降</th><th>成功</th><th>陸/海</th><th>平均着地</th><th>再表示</th></tr>';
+    var html = '<table style="width:100%; font-size:11px; border-collapse:separate; border-spacing:0;">' +
+        '<thead><tr style="background:var(--bg-input); border-bottom:1px solid var(--border-color);">' +
+        '<th style="padding:6px 4px; text-align:left;">時刻/場所</th>' +
+        '<th style="padding:6px 4px; text-align:center;">条件</th>' +
+        '<th style="padding:6px 4px; text-align:center;">成功</th>' +
+        '<th style="padding:6px 4px; text-align:center;">陸/海</th>' +
+        '<th style="padding:6px 4px; text-align:left;">平均着地</th>' +
+        '<th style="padding:6px 4px; text-align:center;">操作</th>' +
+        '</tr></thead><tbody>';
 
     for (var i = 0; i < _ehimeHistory.length; i++) {
         var e = _ehimeHistory[i];
-        var landPct  = e.successCount > 0 ? Math.round((e.landCount  / e.successCount) * 100) : 0;
-        var waterPct = e.successCount > 0 ? Math.round((e.waterCount / e.successCount) * 100) : 0;
+        var successCount = parseInt(e.successCount, 10) || 0;
+        var landCount = parseInt(e.landCount, 10) || 0;
+        var waterCount = parseInt(e.waterCount, 10) || 0;
+        var landPct = successCount > 0 ? Math.round((landCount / successCount) * 100) : 0;
+        var waterPct = successCount > 0 ? Math.round((waterCount / successCount) * 100) : 0;
         var statusColor = e.landCount > 0 ? 'var(--color-danger)' : 'var(--color-success)';
+        var meanLat = toFiniteNumber(e.meanLat);
+        var meanLng = toFiniteNumber(e.meanLng);
+        var hasMean = (meanLat !== null && meanLng !== null);
+        var rowBg = (i % 2 === 0) ? 'transparent' : 'var(--bg-input)';
+        var replayId = parseInt(e.id, 10);
+        if (isNaN(replayId)) replayId = e.id;
 
-        html += '<tr>' +
-            '<td>' + e.time + '</td>' +
-            '<td>' + (e.siteName || '-') + '</td>' +
-            '<td>' + parseFloat(e.ascent).toFixed(1)  + '</td>' +
-            '<td>' + parseFloat(e.descent).toFixed(1) + '</td>' +
-            '<td>' + e.successCount + '/13</td>' +
-            '<td style="color:' + statusColor + ';">' + landPct + '%陸</td>' +
-            '<td style="cursor:pointer; text-decoration:underline;" onclick="map.panTo([' + e.meanLat.toFixed(4) + ',' + e.meanLng.toFixed(4) + '])">' +
-            e.meanLat.toFixed(3) + ',' + e.meanLng.toFixed(3) + '</td>' +
-            '<td><button type="button" class="btn-preset" style="height:20px; font-size:10px; padding:0 6px;" onclick="replayEhimeHistory(' + e.id + ')">表示</button></td>' +
+        html += '<tr style="background:' + rowBg + '; border-bottom:1px solid var(--border-color);">' +
+            '<td style="padding:6px 4px; line-height:1.35;"><b>' + (e.time || '-') + '</b><br><span style="color:var(--text-secondary);">' + (e.siteName || '-') + '</span></td>' +
+            '<td style="padding:6px 4px; text-align:center;">上昇 ' + (toFiniteNumber(e.ascent) || 0).toFixed(1) + '<br>下降 ' + (toFiniteNumber(e.descent) || 0).toFixed(1) + '</td>' +
+            '<td style="padding:6px 4px; text-align:center;"><b>' + successCount + '/13</b></td>' +
+            '<td style="padding:6px 4px; text-align:center; color:' + statusColor + ';"><b>陸 ' + landPct + '%</b><br><span style="color:var(--text-secondary);">海 ' + waterPct + '%</span></td>' +
+            '<td style="padding:6px 4px;">' + (hasMean
+                ? '<button type="button" class="btn-preset" style="height:22px; font-size:10px; padding:0 6px;" onclick="map.panTo([' + meanLat.toFixed(4) + ',' + meanLng.toFixed(4) + '])">地図へ</button><br><span style="font-size:10px; color:var(--text-secondary);">' + meanLat.toFixed(3) + ', ' + meanLng.toFixed(3) + '</span>'
+                : '<span style="color:var(--text-secondary);">データなし</span>') + '</td>' +
+            '<td style="padding:6px 4px; text-align:center;"><button type="button" class="btn-preset" style="height:22px; font-size:10px; padding:0 8px;" onclick="replayEhimeHistory(' + replayId + ')">再表示</button></td>' +
             '</tr>';
     }
-    html += '</table>';
+    html += '</tbody></table>';
     $panels.html(html);
 }
 

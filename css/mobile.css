@@ -3,92 +3,92 @@
 html,
 body,
 #map_canvas {
-    height: 100%;
-    /* モバイルではサイドバーレイアウトを無効化 — 地図を全幅に */
-    width: 100% !important;
+  height: 100%;
+  /* モバイルではサイドバーレイアウトを無効化 — 地図を全幅に */
+  width: 100% !important;
 }
 
 /* sidebar-open のマップ幅制限を無効化 */
 body.sidebar-open #map_canvas {
-    width: 100% !important;
+  width: 100% !important;
 }
 
 /* モバイルではサイドバーのクロム（タブ、ボーダーなど）を非表示にし、
    コンテナを透明オーバーレイに変換して子要素が独立ポジショニングできるようにする */
 #app-sidebar {
-    position: static !important;
-    width: auto !important;
-    height: auto !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    overflow: visible !important;
-    transform: none !important;
-    display: contents !important;
-    /* レイアウト上は存在しないように */
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  transform: none !important;
+  display: contents !important;
+  /* レイアウト上は存在しないように */
 }
 
 #sidebar-toggle {
-    display: none !important;
+  display: none !important;
 }
 
 .sidebar-tabs {
-    display: none !important;
+  display: none !important;
 }
 
 .sidebar-content {
-    display: contents !important;
+  display: contents !important;
 }
 
 /* サイドバー内のパネルをモバイルではブロック表示に（JS制御に委譲） */
 .sidebar-panel {
-    display: contents !important;
+  display: contents !important;
 }
 
 body.mobile-active-panel-open {
-    overflow: hidden;
+  overflow: hidden;
 }
 
 .box {
-    transition: transform .25s ease, opacity .25s ease;
+  transition: transform .25s ease, opacity .25s ease;
 }
 
 .mobile-only {
-    display: flex;
+  display: flex;
 }
 
 #mobile_nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--bg-panel);
-    display: none;
-    /* デフォルト非表示、メディアクエリで flex に */
-    gap: var(--space-xs);
-    padding: var(--space-sm) var(--space-sm) calc(env(safe-area-inset-bottom, 0) + var(--space-sm));
-    z-index: 2000;
-    border-top: 1px solid var(--border-color);
-    backdrop-filter: blur(12px);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-panel);
+  display: none;
+  /* デフォルト非表示、メディアクエリで flex に */
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-sm) calc(env(safe-area-inset-bottom, 0) + var(--space-sm));
+  z-index: 2000;
+  border-top: 1px solid var(--border-color);
+  backdrop-filter: blur(12px);
 }
 
 #mobile_nav button {
-    flex: 1;
-    min-height: 44px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-sm);
-    color: var(--text-primary);
-    font-size: 12px;
-    padding: var(--space-sm) var(--space-xs);
-    font-weight: 600;
-    box-shadow: var(--shadow-sm);
+  flex: 1;
+  min-height: 44px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: var(--space-sm) var(--space-xs);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
 }
 
 #mobile_nav button.active {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--text-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-on-primary);
 }
 
 /* Adjust key panels to full-width sheets */
@@ -96,39 +96,39 @@ body.mobile-active-panel-open {
 #scenario_info,
 #burst-calc-wrapper,
 #ensemble_stats_panel {
-    position: fixed !important;
-    width: 100dvw !important;
-    max-width: 100% !important;
-    left: 0 !important;
-    right: 0 !important;
-    max-height: 80% !important;
-    bottom: 48px;
-    top: auto !important;
-    margin: 0 !important;
-    padding-left: calc(env(safe-area-inset-left, 0) + 8px) !important;
-    padding-right: calc(env(safe-area-inset-right, 0) + 8px) !important;
-    box-sizing: border-box;
-    border-radius: 12px 12px 0 0 !important;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3) !important;
-    display: none;
-    overflow: auto;
-    /* サイドバー内の transparent オーバーライドを打ち消す */
-    background-color: rgba(255, 255, 255, 0.97) !important;
-    border: 1px solid #e0e0e0 !important;
+  position: fixed !important;
+  width: 100dvw !important;
+  max-width: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  max-height: 80% !important;
+  bottom: 48px;
+  top: auto !important;
+  margin: 0 !important;
+  padding-left: calc(env(safe-area-inset-left, 0) + 8px) !important;
+  padding-right: calc(env(safe-area-inset-right, 0) + 8px) !important;
+  box-sizing: border-box;
+  border-radius: 12px 12px 0 0 !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3) !important;
+  display: none;
+  overflow: auto;
+  /* サイドバー内の transparent オーバーライドを打ち消す */
+  background-color: rgba(255, 255, 255, 0.97) !important;
+  border: 1px solid #e0e0e0 !important;
 }
 
 #scenario_info {
-    max-height: 50%;
+  max-height: 50%;
 }
 
 #ensemble_stats_panel {
-    max-height: 65%;
+  max-height: 65%;
 }
 
 /* Drag handle larger for touch */
 img.handle {
-    width: 24px;
-    height: auto;
+  width: 24px;
+  height: auto;
 }
 
 /* =============================================
@@ -137,153 +137,153 @@ img.handle {
 
 /* フォームグループをモバイルではスタック表示 */
 .form-group {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
 }
 
 .form-group label {
-    flex: none;
-    max-width: none;
-    width: 100%;
-    margin-bottom: 2px;
-    white-space: normal;
-    overflow: visible;
+  flex: none;
+  max-width: none;
+  width: 100%;
+  margin-bottom: 2px;
+  white-space: normal;
+  overflow: visible;
 }
 
 .form-group .form-control,
 .form-group .form-inline-pair,
 .form-group .form-date-group {
-    width: 100%;
-    box-sizing: border-box;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #launch-card input[type="text"],
 #launch-card select {
-    width: 100% !important;
-    box-sizing: border-box;
-    max-width: 100%;
+  width: 100% !important;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 /* インラインペアはモバイルでも横並び維持 */
 .form-inline-pair,
 .form-date-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .form-inline-pair input,
 .form-inline-pair select,
 .form-date-group input,
 .form-date-group select {
-    flex: 1;
-    min-width: 0;
-    width: auto !important;
+  flex: 1;
+  min-width: 0;
+  width: auto !important;
 }
 
 /* アクションボタン */
 .form-actions {
-    flex-direction: column;
+  flex-direction: column;
 }
 
 .form-actions input {
-    width: 100%;
+  width: 100%;
 }
 
 /* Ehime results table responsive */
 #ehime_results_table {
-    font-size: 10px;
+  font-size: 10px;
 }
 
 #ehime_results_table thead {
-    position: sticky;
-    top: 0;
+  position: sticky;
+  top: 0;
 }
 
 /* Mobile card list hidden by default; shown when JS detects narrow layout */
 #ehime_results_mobile {
-    display: none;
-    margin-top: 6px;
+  display: none;
+  margin-top: 6px;
 }
 
 #ehime_results_mobile .ehime-card {
-    background: #ffffffdd;
-    border: 1px solid #aac;
-    border-radius: 6px;
-    padding: 6px 8px;
-    margin-bottom: 6px;
-    font-size: 11px;
-    line-height: 1.3em;
-    position: relative;
+  background: #ffffffdd;
+  border: 1px solid #aac;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  line-height: 1.3em;
+  position: relative;
 }
 
 #ehime_results_mobile .ehime-card .swatch {
-    width: 14px;
-    height: 14px;
-    border: 1px solid #000;
-    display: inline-block;
-    margin-right: 4px;
-    vertical-align: middle;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #000;
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 #ehime_results_mobile .ehime-card .label {
-    font-weight: bold;
+  font-weight: bold;
 }
 
 #ehime_results_mobile .ehime-card.base {
-    border: 1px solid #4477aa;
-    box-shadow: 0 0 0 1px #4477aa inset;
+  border: 1px solid #4477aa;
+  box-shadow: 0 0 0 1px #4477aa inset;
 }
 
 #ehime_results_mobile .ehime-card.pending {
-    opacity: 0.6;
+  opacity: 0.6;
 }
 
 #ehime_results_mobile .ehime-card.error {
-    border-color: #c00;
+  border-color: #c00;
 }
 
 #ehime_results_mobile .ehime-card .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 8px;
-    margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 4px;
 }
 
 #ehime_results_mobile .ehime-card .meta span {
-    white-space: nowrap;
+  white-space: nowrap;
 }
 
 #ehime_results_mobile .ehime-card .landsea-sea {
-    color: #0074d9;
-    font-weight: bold;
+  color: #0074d9;
+  font-weight: bold;
 }
 
 @media (max-width:600px) {
-    #ehime_results_table {
-        display: none;
-    }
+  #ehime_results_table {
+    display: none;
+  }
 
-    #ehime_results_mobile {
-        display: block;
-    }
+  #ehime_results_mobile {
+    display: block;
+  }
 }
 
 /* Hide desktop-only items */
 @media (max-width:768px) {
-    #mobile_nav {
-        display: flex !important;
-    }
+  #mobile_nav {
+    display: flex !important;
+  }
 
-    .box {
-        font-size: 12px;
-    }
+  .box {
+    font-size: 12px;
+  }
 }
 
 /* Utility classes */
 .mobile-panel-open {
-    display: block !important;
+  display: block !important;
 }
 
 /* Smooth slide-up effect (translate when hidden) */
@@ -291,76 +291,76 @@ img.handle {
 #scenario_info,
 #burst-calc-wrapper,
 #ensemble_stats_panel {
-    transform: translateY(100%);
-    opacity: 0;
+  transform: translateY(100%);
+  opacity: 0;
 }
 
 #input_form.mobile-panel-open,
 #scenario_info.mobile-panel-open,
 #burst-calc-wrapper.mobile-panel-open,
 #ensemble_stats_panel.mobile-panel-open {
-    transform: translateY(0);
-    opacity: 1;
+  transform: translateY(0);
+  opacity: 1;
 }
 
 /* Hide the mobile nav on larger screens */
 @media (min-width:769px) {
-    #mobile_nav {
-        display: none !important;
-    }
+  #mobile_nav {
+    display: none !important;
+  }
 }
 
 /* Chart containers for mobile */
 #chart_container,
 #wind_chart_container {
-    width: 95% !important;
-    left: 2.5% !important;
-    bottom: 55px !important;
-    top: auto !important;
-    height: 200px;
-    background: white;
-    z-index: 999;
+  width: 95% !important;
+  left: 2.5% !important;
+  bottom: 55px !important;
+  top: auto !important;
+  height: 200px;
+  background: white;
+  z-index: 999;
 }
 
 /* --- Compact launch panel mode ---
    Automatically applied via JS on mobile. Shrinks spacing & reverts to
    horizontal layout where possible for less vertical space usage. */
 #input_form.compact {
-    font-size: 11px;
-    line-height: 1.25;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 /* Compact: フォームグループを横並びに戻す */
 #input_form.compact .form-group {
-    flex-direction: row;
-    align-items: center;
-    gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
 }
 
 #input_form.compact .form-group label {
-    flex: 0 0 120px;
-    margin-bottom: 0;
-    white-space: nowrap;
+  flex: 0 0 120px;
+  margin-bottom: 0;
+  white-space: nowrap;
 }
 
 #input_form.compact .form-group .form-control {
-    flex: 1;
+  flex: 1;
 }
 
 /* Compact: インラインペアの入力幅 */
 #input_form.compact .form-inline-pair input,
 #input_form.compact .form-date-group input {
-    width: auto !important;
+  width: auto !important;
 }
 
 /* Compact: ボタン */
 #input_form.compact .form-actions {
-    flex-direction: row;
+  flex-direction: row;
 }
 
 #input_form.compact #run_pred_btn {
-    padding: 4px 10px;
-    font-size: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 
@@ -369,8 +369,8 @@ img.handle {
 input[type="text"],
 select,
 input[type="button"] {
-    font-size: 16px;
-    padding: 8px;
-    margin: 2px 0;
-    box-sizing: border-box;
+  font-size: 16px;
+  padding: 8px;
+  margin: 2px 0;
+  box-sizing: border-box;
 }

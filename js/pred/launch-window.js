@@ -38,29 +38,40 @@ function buildEhimeVariants(baseSettings) {
     var BURST_MINUS = 0.20;
 
     var defs = [
-        { label: 'BASE', ascent: 0, descent: 0, burstFactor: 0 },
-        { label: 'ASC-', ascent: -ASC_MARGIN, descent: 0, burstFactor: 0 },
-        { label: 'ASC+', ascent: +ASC_MARGIN, descent: 0, burstFactor: 0 },
-        { label: 'DES-', ascent: 0, descent: -DES_MARGIN, burstFactor: 0 },
-        { label: 'DES+', ascent: 0, descent: +DES_MARGIN, burstFactor: 0 },
-        { label: 'BURST-', ascent: 0, descent: 0, burstFactor: -BURST_MINUS },
-        { label: 'BURST+', ascent: 0, descent: 0, burstFactor: +BURST_PLUS },
-        { label: 'A-D-', ascent: -ASC_MARGIN, descent: -DES_MARGIN, burstFactor: 0 },
-        { label: 'A+D+', ascent: +ASC_MARGIN, descent: +DES_MARGIN, burstFactor: 0 },
-        { label: 'A-B-', ascent: -ASC_MARGIN, descent: 0, burstFactor: -BURST_MINUS },
-        { label: 'A+B+', ascent: +ASC_MARGIN, descent: 0, burstFactor: +BURST_PLUS },
-        { label: 'D-B-', ascent: 0, descent: -DES_MARGIN, burstFactor: -BURST_MINUS },
-        { label: 'D+B+', ascent: 0, descent: +DES_MARGIN, burstFactor: +BURST_PLUS }
+        { label: 'BASE', ascent: 0, descent: 0, burstFactor: 0, desc: "基準設定 (0 m/s 変動)" },
+        { label: 'ASC-', ascent: -ASC_MARGIN, descent: 0, burstFactor: 0, desc: "上昇 -" + ASC_MARGIN + " m/s" },
+        { label: 'ASC+', ascent: +ASC_MARGIN, descent: 0, burstFactor: 0, desc: "上昇 +" + ASC_MARGIN + " m/s" },
+        { label: 'DES-', ascent: 0, descent: -DES_MARGIN, burstFactor: 0, desc: "下降 -" + DES_MARGIN + " m/s" },
+        { label: 'DES+', ascent: 0, descent: +DES_MARGIN, burstFactor: 0, desc: "下降 +" + DES_MARGIN + " m/s" },
+        { label: 'BURST-', ascent: 0, descent: 0, burstFactor: -BURST_MINUS, desc: "破裂高度 -" + (BURST_MINUS * 100) + "%" },
+        { label: 'BURST+', ascent: 0, descent: 0, burstFactor: +BURST_PLUS, desc: "破裂高度 +" + (BURST_PLUS * 100) + "%" },
+        { label: 'A-D-', ascent: -ASC_MARGIN, descent: -DES_MARGIN, burstFactor: 0, desc: "上昇 -" + ASC_MARGIN + " & 下降 -" + DES_MARGIN },
+        { label: 'A+D+', ascent: +ASC_MARGIN, descent: +DES_MARGIN, burstFactor: 0, desc: "上昇 +" + ASC_MARGIN + " & 下降 +" + DES_MARGIN },
+        { label: 'A-B-', ascent: -ASC_MARGIN, descent: 0, burstFactor: -BURST_MINUS, desc: "上昇 -" + ASC_MARGIN + " & 破裂 -" + (BURST_MINUS * 100) + "%" },
+        { label: 'A+B+', ascent: +ASC_MARGIN, descent: 0, burstFactor: +BURST_PLUS, desc: "上昇 +" + ASC_MARGIN + " & 破裂 +" + (BURST_PLUS * 100) + "%" },
+        { label: 'D-B-', ascent: 0, descent: -DES_MARGIN, burstFactor: -BURST_MINUS, desc: "下降 -" + DES_MARGIN + " & 破裂 -" + (BURST_MINUS * 100) + "%" },
+        { label: 'D+B+', ascent: 0, descent: +DES_MARGIN, burstFactor: +BURST_PLUS, desc: "下降 +" + DES_MARGIN + " & 破裂 +" + (BURST_PLUS * 100) + "%" }
     ];
 
-    return defs.map(function (d) {
+    return defs.map(function (d, index) {
         var s = JSON.parse(JSON.stringify(baseSettings));
         s.ascent_rate = baseAscent + d.ascent;
         s.descent_rate = baseDescent + d.descent;
         s.burst_altitude = baseBurst * (1 + d.burstFactor);
         if (s.descent_rate <= 0) s.descent_rate = 0.5;
-        return { label: d.label, settings: s };
+        return { index: index, label: d.label, desc: d.desc, settings: s };
     });
+}
+
+function formatLaunchWindowFlightTime(seconds) {
+    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) return '-';
+    var minutes = Math.floor(seconds / 60);
+    var hours = Math.floor(minutes / 60);
+    var remainMinutes = minutes % 60;
+    if (hours > 0) {
+        return hours + '時間' + remainMinutes + '分';
+    }
+    return minutes + '分';
 }
 
 function classifyLandingForLaunchWindow(lat, lon, callback) {
@@ -93,6 +104,8 @@ function evaluateEhimeProbabilityForSlot(slotSettings, api_url, callback) {
     var unknownCount = 0;
     var baseLanding = null;
     var baseWindSpeed = 0;
+    var baseFlightTimeSec = 0;
+    var slotVariants = new Array(total);
 
     variants.forEach(function (v) {
         var req = JSON.parse(JSON.stringify(v.settings));
@@ -108,12 +121,23 @@ function evaluateEhimeProbabilityForSlot(slotSettings, api_url, callback) {
                     if (v.label === 'BASE') {
                         baseLanding = { lat: lat, lng: lng };
                         baseWindSpeed = calcSurfaceWindFromPrediction(data.prediction);
+                        baseFlightTimeSec = parsed.flight_time || 0;
                     }
 
                     classifyLandingForLaunchWindow(lat, lng, function (isWater) {
                         if (isWater === true) seaCount++;
                         else if (isWater === false) landCount++;
                         else unknownCount++;
+                        
+                        slotVariants[v.index] = {
+                            index: v.index,
+                            label: v.label,
+                            desc: v.desc,
+                            lat: lat,
+                            lng: lng,
+                            isWater: isWater,
+                            settings: req
+                        };
 
                         completed++;
                         if (completed >= total) {
@@ -125,7 +149,10 @@ function evaluateEhimeProbabilityForSlot(slotSettings, api_url, callback) {
                                 seaProbPct: seaPct,
                                 unknownCount: unknownCount,
                                 baseLanding: baseLanding,
-                                baseWindSpeed: baseWindSpeed
+                                baseWindSpeed: baseWindSpeed,
+                                flightTimeSec: baseFlightTimeSec,
+                                flightTimeStr: formatLaunchWindowFlightTime(baseFlightTimeSec),
+                                variants: slotVariants.filter(function (item) { return !!item; }).sort(function (a, b) { return a.index - b.index; })
                             });
                         }
                     });
@@ -138,7 +165,10 @@ function evaluateEhimeProbabilityForSlot(slotSettings, api_url, callback) {
                             seaProbPct: 0,
                             unknownCount: unknownCount,
                             baseLanding: baseLanding,
-                            baseWindSpeed: baseWindSpeed
+                            baseWindSpeed: baseWindSpeed,
+                            flightTimeSec: baseFlightTimeSec,
+                            flightTimeStr: formatLaunchWindowFlightTime(baseFlightTimeSec),
+                            variants: slotVariants.filter(function (item) { return !!item; }).sort(function (a, b) { return a.index - b.index; })
                         });
                     }
                 }
@@ -152,11 +182,43 @@ function evaluateEhimeProbabilityForSlot(slotSettings, api_url, callback) {
                         seaProbPct: 0,
                         unknownCount: unknownCount,
                         baseLanding: baseLanding,
-                        baseWindSpeed: baseWindSpeed
+                        baseWindSpeed: baseWindSpeed,
+                        flightTimeSec: baseFlightTimeSec,
+                        flightTimeStr: formatLaunchWindowFlightTime(baseFlightTimeSec),
+                        variants: slotVariants.filter(function (item) { return !!item; }).sort(function (a, b) { return a.index - b.index; })
                     });
                 }
             });
     });
+}
+
+function updateLaunchWindowVariantSummary(result) {
+    if (!result || !Array.isArray(result.variants) || result.variants.length === 0) return;
+
+    var landingPoints = result.variants.filter(function (v) { return v && typeof v.lat === 'number' && typeof v.lng === 'number'; }).map(function (v) {
+        return { lat: v.lat, lng: v.lng, label: v.label, isWater: v.isWater };
+    });
+    if (landingPoints.length === 0) return;
+
+    if (typeof updateEnsembleWaterStats === 'function') {
+        updateEnsembleWaterStats(landingPoints, landingPoints.length);
+    }
+    if (typeof compute13VarStatistics === 'function') {
+        compute13VarStatistics(landingPoints);
+    }
+}
+
+function bindLaunchWindowVariantInteractions(variantIndex) {
+    var marker = _launchWindowVariantMarkers[variantIndex];
+    var selectVariant = function () {
+        if (marker && typeof marker.getLatLng === 'function') {
+            map.panTo(marker.getLatLng());
+            if (typeof marker.openPopup === 'function') marker.openPopup();
+        }
+    };
+
+    $('#ehime_row_' + variantIndex).css('cursor', 'pointer').off('click').on('click', selectVariant);
+    $('#ehime_card_' + variantIndex).css('cursor', 'pointer').off('click').on('click', selectVariant);
 }
 
 function initLaunchWindowUI() {
@@ -165,17 +227,7 @@ function initLaunchWindowUI() {
     if (slider) {
         slider.addEventListener('input', function () {
             var idx = parseInt(this.value);
-            updateLaunchWindowSlider(idx);
-            _launchWindowLastSelectedIdx = idx;
-
-            // localで確率計算済みの場合、スライダー操作では再計算しない
-            if (_launchWindowUseEhimeProbability) return;
-
-            // D4: 1.0秒後にアンサンブル実行
-            if (_lwDebounceTimer) clearTimeout(_lwDebounceTimer);
-            _lwDebounceTimer = setTimeout(function() {
-                runEhimeAtSlot(idx);
-            }, 1000);
+            syncLaunchWindowSelection(idx, _launchWindowUseEhimeProbability);
         });
         // changeイベントは冗長になる可能性があるためinput + debounceに統一
     }
@@ -186,7 +238,11 @@ function initLaunchWindowUI() {
         threshSlider.addEventListener('input', function () {
             _launchWindowNGThreshold = parseInt(this.value);
             document.getElementById('ng_threshold_value').textContent = this.value + '%';
+            refreshLaunchWindowMarkerStyles(_launchWindowLastSelectedIdx);
             updateLaunchWindowNGLine();
+            if (_launchWindowResults.length > 0) {
+                updateLaunchWindowSlider(_launchWindowLastSelectedIdx);
+            }
         });
     }
 
@@ -235,6 +291,62 @@ function getLaunchWindowBaseTime() {
     var h  = parseInt($('#hour').val());
     var mi = parseInt($('#min').val());
     return moment([y, mo, d, h, mi, 0]).utcOffset(9 * 60, true).clone().utc();
+}
+
+function getLaunchWindowLandPct(result) {
+    if (!result) return 0;
+    if (typeof result.landProbPct === 'number') return result.landProbPct;
+    if (result.isWater === false) return 100;
+    if (result.isWater === true) return 0;
+    return 0;
+}
+
+function getLaunchWindowMarkerFillColor(result) {
+    return getLaunchWindowLandPct(result) >= _launchWindowNGThreshold ? '#ff3b30' : '#34c759';
+}
+
+function refreshLaunchWindowMarkerStyles(selectedIdx) {
+    for (var i = 0; i < _launchWindowMarkers.length; i++) {
+        var marker = _launchWindowMarkers[i];
+        var result = _launchWindowResults[i];
+        if (!marker || !result) continue;
+
+        var isSelected = (i === selectedIdx);
+        var isNG = getLaunchWindowLandPct(result) >= _launchWindowNGThreshold;
+        var color = isNG ? '#ff3b30' : '#34c759';
+
+        marker.setStyle({
+            radius: isSelected ? 10 : 5,
+            weight: isSelected ? 3 : 1,
+            fillOpacity: isSelected ? 1.0 : 0.75,
+            color: isSelected ? '#1c1c1e' : color,
+            fillColor: color
+        });
+
+        if (isSelected) {
+            marker.bringToFront();
+        }
+    }
+}
+
+function syncLaunchWindowSelection(slotIdx, skipRecalc) {
+    _launchWindowLastSelectedIdx = slotIdx;
+    updateLaunchWindowSlider(slotIdx);
+
+    if (skipRecalc) return;
+    if (_launchWindowUseEhimeProbability) return;
+
+    if (_lwDebounceTimer) clearTimeout(_lwDebounceTimer);
+    _lwDebounceTimer = setTimeout(function () {
+        runEhimeAtSlot(slotIdx);
+    }, 1000);
+}
+
+function handleLaunchWindowSelection(slotIdx) {
+    syncLaunchWindowSelection(slotIdx, true);
+    if (!_launchWindowUseEhimeProbability) {
+        runEhimeAtSlot(slotIdx);
+    }
 }
 
 // ============================================================
@@ -294,13 +406,13 @@ function runLaunchWindowAnalysis() {
             updateLaunchWindowNGLine();
             // スライダーを0に戻してハイライト
             $('#launch_window_slider').val(0);
-            updateLaunchWindowSlider(0);
+            syncLaunchWindowSelection(0, true);
+            refreshLaunchWindowMarkerStyles(0);
             if (typeof showToast === 'function') {
                 showToast('放球ウィンドウ分析完了', 'success', 4000);
             }
             // D4: 分析完了後に自動実行はせず、ユーザーの選択に任せる
             // 初期のBASE位置をハイライトするのみ
-            updateLaunchWindowSlider(0);
             return;
         }
 
@@ -330,7 +442,8 @@ function runLaunchWindowAnalysis() {
                     windSpeed: ehimeProb.baseWindSpeed || 0,
                     landProbPct: ehimeProb.landProbPct,
                     seaProbPct: ehimeProb.seaProbPct,
-                    unknownCount: ehimeProb.unknownCount || 0
+                    unknownCount: ehimeProb.unknownCount || 0,
+                    variants: ehimeProb.variants || []
                 };
                 _launchWindowResults.push(result);
                 plotLaunchWindowMarker(result, currentSlot);
@@ -423,6 +536,17 @@ function calcSurfaceWindFromPrediction(tawhiriPrediction) {
 function runEhimeAtSlot(slotIdx) {
     if (_launchWindowUseEhimeProbability) {
         // localの放球NG判定は13バリアント確率で評価済みのため再計算しない
+        if (_launchWindowResults.length > 0) {
+            var localResult = _launchWindowResults[slotIdx];
+            if (localResult) {
+                var localTime = localResult.launchTimeUTC.clone().utcOffset(9 * 60);
+                $('#year').val(localTime.year());
+                $('#month').val(localTime.month() + 1);
+                $('#day').val(localTime.date());
+                $('#hour').val(localTime.hours());
+                $('#min').val(localTime.minutes());
+            }
+        }
         updateLaunchWindowSlider(slotIdx);
         return;
     }
@@ -494,6 +618,11 @@ function plotLaunchWindowMarker(result, slotIdx) {
         weight: 1
     }).addTo(map);
 
+    marker.setStyle({
+        fillColor: getLaunchWindowMarkerFillColor(result),
+        color: result.isWater === true ? '#1565C0' : result.isWater === false ? '#C62828' : '#9E9E9E'
+    });
+
     var landSeaText = result.isWater === true ? '海' : result.isWater === false ? '陸' : '不明';
     var popupContent =
         '<b>+' + result.offsetMin + '分 (' + result.launchTimeJST + ' JST)</b><br>' +
@@ -507,10 +636,7 @@ function plotLaunchWindowMarker(result, slotIdx) {
     (function(idx) {
         marker.on('click', function() {
             $('#launch_window_slider').val(idx);
-            updateLaunchWindowSlider(idx);
-            if (!_launchWindowUseEhimeProbability) {
-                runEhimeAtSlot(idx);
-            }
+            handleLaunchWindowSelection(idx);
         });
     })(slotIdx);
 
@@ -522,6 +648,12 @@ function clearLaunchWindowMarkers() {
         try { _launchWindowMarkers[i].remove(); } catch (_e) {}
     }
     _launchWindowMarkers = [];
+    _launchWindowVariantMarkers.forEach(function(m) { map.removeLayer(m); });
+    _launchWindowVariantMarkers = [];
+    if (map_items && map_items['13var_hull']) {
+        map.removeLayer(map_items['13var_hull']);
+        delete map_items['13var_hull'];
+    }
 }
 
 function clearLaunchWindow() {
@@ -537,8 +669,10 @@ function clearLaunchWindow() {
 }
 
 // ============================================================
-// スライダー UI 更新 (マーカーハイライトのみ)
+// スライダー UI 更新 (マーカーハイライトと13バリアントピン描画)
 // ============================================================
+
+var _launchWindowVariantMarkers = [];
 
 function updateLaunchWindowSlider(slotIdx) {
     if (slotIdx >= _launchWindowResults.length) return;
@@ -557,20 +691,75 @@ function updateLaunchWindowSlider(slotIdx) {
         '着地: ' + result.landingLat.toFixed(4) + ', ' + result.landingLng.toFixed(4) + '<br>' +
         '判定: <b style="color:' + landSeaColor + '">' + landSea + '</b>' +
         ' | 地表風速: <b>' + result.windSpeed.toFixed(1) + ' m/s</b>' +
+        ' | 飛行時間: <b>' + (result.flightTimeStr || '-') + '</b>' +
         probText
     );
+    $('#launch_window_result_area').show();
+    refreshLaunchWindowMarkerStyles(slotIdx);
 
-    // マーカーハイライト
-    for (var i = 0; i < _launchWindowMarkers.length; i++) {
-        if (i === slotIdx) {
-            _launchWindowMarkers[i].setStyle({ radius: 10, weight: 3, fillOpacity: 1.0 });
-            _launchWindowMarkers[i].bringToFront();
-        } else {
-            _launchWindowMarkers[i].setStyle({ radius: 5, weight: 1, fillOpacity: 0.5 });
-        }
-    }
+    updateLaunchWindowVariantSummary(result);
 
     map.panTo([result.landingLat, result.landingLng]);
+
+    // 13バリアントのピンをクリアして再描画
+    _launchWindowVariantMarkers.forEach(function(m) { map.removeLayer(m); });
+    _launchWindowVariantMarkers = [];
+
+    if (result.variants && result.variants.length > 0) {
+        var variantColors = [
+            '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+            '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+            '#469990', '#dcbeff', '#9A6324'
+        ];
+        // 表も再生成
+        $("#ehime_results_body").empty();
+        $("#ehime_results_mobile").empty();
+
+        result.variants.forEach(function(v, i) {
+            var variantIndex = typeof v.index === 'number' ? v.index : i;
+            var color = variantColors[variantIndex % variantColors.length];
+            var m = L.circleMarker([v.lat, v.lng], {
+                radius: v.label === 'BASE' ? 7 : 4,
+                fillColor: color,
+                color: '#333',
+                weight: v.label === 'BASE' ? 2 : 1,
+                fillOpacity: 0.85
+            }).addTo(map);
+            var landText = v.isWater === true ? '海 (Sea)' : (v.isWater === false ? '陸 (Land)' : '不明');
+            m.bindPopup('<b>' + v.label + '</b><br>判定: ' + landText);
+            _launchWindowVariantMarkers[variantIndex] = m;
+
+            // 表への追加
+            var landSeaFlag = v.isWater === true ? 'blue' : (v.isWater === false ? 'green' : 'gray');
+            
+            var rowHtml = '<tr id="ehime_row_' + variantIndex + '" data-variant-index="' + variantIndex + '">' +
+                '<td>' + (variantIndex + 1) + '</td>' +
+                '<td><span class="color-swatch" style="background:' + color + ';"></span></td>' +
+                '<td><b>' + v.label + '</b></td>' +
+                '<td>' + (v.desc || '') + '</td>' +
+                '<td>' + v.lat.toFixed(4) + '</td>' +
+                '<td>' + v.lng.toFixed(4) + '</td>' +
+                '<td>' + (v.settings ? v.settings.ascent_rate.toFixed(1) : '-') + '</td>' +
+                '<td>' + (v.settings ? v.settings.descent_rate.toFixed(1) : '-') + '</td>' +
+                '<td>' + (v.settings ? v.settings.burst_altitude.toFixed(0) : '-') + '</td>' +
+                '<td>' + (result.flightTimeStr || '-') + '</td>' +
+                '<td><span class="badge-' + landSeaFlag + '">' + landText + '</span></td>' +
+                '</tr>';
+            $("#ehime_results_body").append(rowHtml);
+
+            var baseClass = (variantIndex === 0) ? ' base' : '';
+            var mobileCard = '<div class="ehime-card' + baseClass + '" id="ehime_card_' + variantIndex + '" data-variant-index="' + variantIndex + '">' +
+                '<span class="swatch" style="background:' + color + ';"></span>' +
+                '<span class="label">' + v.label + '</span> &mdash; ' + (v.desc || '') +
+                '<div class="meta">' +
+                '着地: ' + v.lat.toFixed(4) + ', ' + v.lng.toFixed(4) + '<br>' +
+                '判定: <span class="badge-' + landSeaFlag + '">' + landText + '</span>' +
+                '</div></div>';
+            $("#ehime_results_mobile").append(mobileCard);
+
+            bindLaunchWindowVariantInteractions(variantIndex);
+        });
+    }
 }
 
 // ============================================================
@@ -613,7 +802,7 @@ function updateLaunchWindowNGLine() {
             : (r.isWater === true ? '100%' : (r.isWater === false ? '0%' : '-'));
 
         infoHtml +=
-            '<tr style="cursor:pointer;" onclick="document.getElementById(\'launch_window_slider\').value=' + i + '; runEhimeAtSlot(' + i + ');">' +
+            '<tr style="cursor:pointer;" onclick="document.getElementById(\'launch_window_slider\').value=' + i + '; handleLaunchWindowSelection(' + i + ');">' +
             '<td>' + r.launchTimeJST + '</td>' +
             '<td style="color:' + landSeaColor + ';">' + landSeaText + '</td>' +
             '<td>' + r.windSpeed.toFixed(1) + '</td>' +
@@ -623,17 +812,18 @@ function updateLaunchWindowNGLine() {
     }
     infoHtml += '</table>';
     $('#launch_window_ng_info').html(infoHtml);
+    refreshLaunchWindowMarkerStyles(_launchWindowLastSelectedIdx);
 
     // サマリー
     if (ngStartMin >= 0) {
         var ngR = _launchWindowResults.find(function(r) { return r.offsetMin === ngStartMin; });
         $('#launch_window_ng_summary').html(
-            '<span style="color:var(--color-danger); font-weight:bold;">⚠ ' +
+            '<span style="color:var(--color-danger); font-weight:bold;">放球NG: ' +
             (ngR ? ngR.launchTimeJST : '?') + ' JST 以降は放球NG (陸落ち率 ≥ ' + _launchWindowNGThreshold + '%)</span>'
         );
     } else {
         $('#launch_window_ng_summary').html(
-            '<span style="color:var(--color-success); font-weight:bold;">✓ 6時間以内は全て海上落下 (OK)</span>'
+            '<span style="color:var(--color-success); font-weight:bold;">放球可: 6時間以内は全て海上落下</span>'
         );
     }
 }
