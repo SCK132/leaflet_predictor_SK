@@ -497,6 +497,12 @@
   background-color: #2a1515 !important;
 }
 
+/* 落下モードで無効化された入力フィールドの視覚スタイル */
+.fall-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* 基本スタイル */
 html {
   font-family: var(--font-family);

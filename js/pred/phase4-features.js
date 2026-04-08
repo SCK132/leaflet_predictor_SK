@@ -257,6 +257,21 @@ function validateField(el) {
     var rule = VALIDATION_RULES[el.id];
     if (!rule) return true;
 
+    // 落下モード時は開始高度の許容上限を拡張する
+    var dynamicRule = {
+        min: rule.min,
+        max: rule.max,
+        label: rule.label
+    };
+    if (el.id === 'initial_alt') {
+        var predTypeEl = document.getElementById('prediction_type');
+        var isFallMode = predTypeEl && predTypeEl.value === 'fall';
+        if (isFallMode) {
+            dynamicRule.max = 50000;
+            dynamicRule.label = '落下開始高度';
+        }
+    }
+
     var val = parseFloat(el.value);
     var errorEl = document.getElementById('valid_' + el.id);
 
@@ -265,8 +280,8 @@ function validateField(el) {
         return false;
     }
 
-    if (val < rule.min || val > rule.max) {
-        setValidationState(el, errorEl, rule.label + ': ' + rule.min + '〜' + rule.max + ' の範囲');
+    if (val < dynamicRule.min || val > dynamicRule.max) {
+        setValidationState(el, errorEl, dynamicRule.label + ': ' + dynamicRule.min + '〜' + dynamicRule.max + ' の範囲');
         return false;
     }
 

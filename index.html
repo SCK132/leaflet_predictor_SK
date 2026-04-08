@@ -15,6 +15,7 @@
     <link href="css/jquery-ui.css" rel="stylesheet">
     <link href="css/predictor.css" rel="stylesheet">
     <link href="css/mobile.css" rel="stylesheet" media="(max-width:768px)">
+    <link rel="icon" href="./favicon.ico" sizes="any">
     <link rel="manifest" href="manifest.json">
     <!-- スタイルは css/predictor.css に統合済み -->
 
@@ -63,7 +64,7 @@
         <div class="sidebar-tabs">
             <button class="sidebar-tab active" data-panel="panel-settings">SETTINGS</button>
             <button class="sidebar-tab" data-panel="panel-results">RESULTS</button>
-            <button id="dark-mode-toggle" title="ダークモード切替">
+            <button id="dark-mode-toggle" data-theme-toggle="true" title="ダークモード切替">
                 <svg class="theme-icon-sun" viewBox="0 0 24 24">
                     <path
                         d="M12 7a5 5 0 100 10 5 5 0 000-10zM2 13h2a1 1 0 100-2H2a1 1 0 100 2zm18 0h2a1 1 0 100-2h-2a1 1 0 100 2zM11 2v2a1 1 0 102 0V2a1 1 0 10-2 0zm0 18v2a1 1 0 102 0v-2a1 1 0 10-2 0zM5.99 4.58a1 1 0 111.41 1.41L6.05 7.34a1 1 0 11-1.41-1.41l1.35-1.35zm11.41 11.41a1 1 0 111.41 1.41l-1.35 1.35a1 1 0 11-1.41-1.41l1.35-1.35zM5.99 19.41a1 1 0 11-1.41-1.41l1.35-1.35a1 1 0 111.41 1.41l-1.35 1.35zm11.41-13.42a1 1 0 111.41-1.41l1.35 1.35a1 1 0 11-1.41 1.41l-1.35-1.35z">
@@ -215,6 +216,7 @@
                                         target="_blank">info</a>):</label>
                                 <select id="prediction_type" class="form-control">
                                     <option value="single" selected="selected">単発予測</option>
+                                    <option value="fall">落下のみ</option>
                                     <option value="1_hour">1時間ごと</option>
                                     <option value="3_hour">3時間ごと</option>
                                     <option value="6_hour">6時間ごと</option>
@@ -383,6 +385,7 @@
                         <a class="control_button" id="showHideChart" onclick="toggleChart()">高度グラフを表示</a> |
                         <a class="control_button" id="showHideWindChart" onclick="toggleWindChart()">風速グラフを表示</a> |
                         <a class="control_button" id="showHideForm">打ち上げ設定を非表示にする</a> |
+                        <a class="control_button" id="coord_format_toggle" title="緯度経度表示形式を 10 進法 / 60 進法 で切替">60進法表示</a> |
                         <a class="control_button" id="about_window_show">このツールについて</a>
                     </span>
                     <br />
@@ -1103,6 +1106,7 @@
         <button data-target="scenario_info">情報</button>
         <button data-target="ensemble_stats_panel" id="mobile_nav_ehime">統計</button>
         <button data-target="burst-calc-wrapper">計算</button>
+        <button type="button" id="mobile_dark_mode_toggle" data-theme-toggle="true" title="ダークモード切替">テーマ</button>
     </nav>
     <!-- トーストコンテナ -->
     <div id="toast-container"></div>
@@ -1114,7 +1118,7 @@
         // ==============================
         (function () {
             var root = document.documentElement;
-            var toggle = document.getElementById('dark-mode-toggle');
+            var toggles = Array.prototype.slice.call(document.querySelectorAll('[data-theme-toggle]'));
             var darkTileLayer = null;
             var lightTileLayer = null;
 
@@ -1159,27 +1163,40 @@
                 }
             }
 
-            if (toggle) {
-                toggle.addEventListener('click', function () {
-                    var isCurrentlyDark = isDark();
-                    if (isCurrentlyDark) {
-                        // ライトモードへ
-                        root.classList.remove('dark-mode');
-                        root.classList.add('light-mode');
-                        localStorage.setItem('dark-mode', 'false');
-                    } else {
-                        // ダークモードへ
-                        root.classList.remove('light-mode');
-                        root.classList.add('dark-mode');
-                        localStorage.setItem('dark-mode', 'true');
+            function updateThemeToggleLabels() {
+                var dark = isDark();
+                toggles.forEach(function (btn) {
+                    if (!btn) return;
+                    btn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+                    if (btn.id === 'mobile_dark_mode_toggle') {
+                        btn.textContent = dark ? 'ライト' : 'ダーク';
                     }
-                    applyMapTile();
-                    showToast(isCurrentlyDark ? 'ライトモードに切替' : 'ダークモードに切替', 'info', 2000);
                 });
             }
 
+            function handleThemeToggleClick() {
+                var isCurrentlyDark = isDark();
+                if (isCurrentlyDark) {
+                    root.classList.remove('dark-mode');
+                    root.classList.add('light-mode');
+                    localStorage.setItem('dark-mode', 'false');
+                } else {
+                    root.classList.remove('light-mode');
+                    root.classList.add('dark-mode');
+                    localStorage.setItem('dark-mode', 'true');
+                }
+                applyMapTile();
+                updateThemeToggleLabels();
+                showToast(isCurrentlyDark ? 'ライトモードに切替' : 'ダークモードに切替', 'info', 2000);
+            }
+
+            toggles.forEach(function (btn) {
+                btn.addEventListener('click', handleThemeToggleClick);
+            });
+
             // 地図初期化後にタイル適用（遅延実行）
             setTimeout(applyMapTile, 1500);
+            updateThemeToggleLabels();
         })();
 
         // ==============================

@@ -1,5 +1,5 @@
-var CACHE_NAME = 'predictor-cache-v9';
-var TILE_CACHE_NAME = 'predictor-tiles-v9';
+var CACHE_NAME = 'predictor-cache-v10';
+var TILE_CACHE_NAME = 'predictor-tiles-v10';
 var urlsToCache = [
     './',
     './index.html',
@@ -26,6 +26,7 @@ var urlsToCache = [
     './images/target-8-sm.png',
     './images/pop-marker.png',
     './images/drag_handle.png',
+    './favicon.ico',
     './sites.json',
     './manifest.json',
     './js/chart.min.js',

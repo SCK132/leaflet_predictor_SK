@@ -113,8 +113,8 @@ body.mobile-active-panel-open {
   display: none;
   overflow: auto;
   /* サイドバー内の transparent オーバーライドを打ち消す */
-  background-color: rgba(255, 255, 255, 0.97) !important;
-  border: 1px solid #e0e0e0 !important;
+  background-color: var(--bg-panel) !important;
+  border: 1px solid var(--border-color) !important;
 }
 
 #scenario_info {
@@ -208,8 +208,8 @@ img.handle {
 }
 
 #ehime_results_mobile .ehime-card {
-  background: #ffffffdd;
-  border: 1px solid #aac;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 6px 8px;
   margin-bottom: 6px;
@@ -232,8 +232,8 @@ img.handle {
 }
 
 #ehime_results_mobile .ehime-card.base {
-  border: 1px solid #4477aa;
-  box-shadow: 0 0 0 1px #4477aa inset;
+  border: 1px solid var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 
 #ehime_results_mobile .ehime-card.pending {
@@ -318,8 +318,12 @@ img.handle {
   bottom: 55px !important;
   top: auto !important;
   height: 200px;
-  background: white;
+  background: var(--bg-panel);
   z-index: 999;
+}
+
+#mobile_dark_mode_toggle {
+  min-width: 64px;
 }
 
 /* --- Compact launch panel mode ---

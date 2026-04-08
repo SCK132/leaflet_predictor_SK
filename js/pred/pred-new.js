@@ -73,6 +73,7 @@ function runPrediction() {
     var extra_settings = {};
     run_settings.profile = $('#flight_profile').val();
     run_settings.pred_type = $('#prediction_type').val();
+    var fall_mode = (run_settings.pred_type === 'fall');
     run_settings.launch_site_name = $('#site option:selected').text();
 
     // Grab date values
@@ -118,6 +119,24 @@ function runPrediction() {
     } else {
         run_settings.float_altitude = parseFloat($('#burst').val());
         run_settings.stop_datetime = launch_time.add(1, 'days').format();
+    }
+
+    // FALLモード: 開始高度(=initial_alt) と下降速度のみ利用
+    if (fall_mode) {
+        var start_alt = parseFloat($('#initial_alt').val());
+        var descent_rate = parseFloat($('#drag').val());
+        if (isNaN(start_alt) || isNaN(descent_rate)) {
+            throwError('落下モード: 高度/下降速度が不正です。');
+            return;
+        }
+
+        var ASCENT_BUFFER = 1;
+        run_settings.fall_user_start_alt = start_alt;
+        run_settings.launch_altitude = start_alt;
+        run_settings.burst_altitude = start_alt + ASCENT_BUFFER;
+        run_settings.ascent_rate = 1;
+        run_settings.descent_rate = descent_rate;
+        run_settings.profile = 'standard_profile';
     }
 
 
@@ -189,6 +208,43 @@ function runPrediction() {
     }
 
 }
+
+function updateFallModeUI() {
+    var fall = ($('#prediction_type').val() === 'fall');
+    var disableIds = ['#ascent', '#burst', '#flight_profile'];
+
+    if (fall) {
+        $('#flight_profile').val('standard_profile');
+        disableIds.forEach(function (id) { $(id).prop('disabled', true).addClass('fall-disabled'); });
+        $('#burst-calc-show').hide();
+
+        var label = $('label[for="initial_alt"]');
+        if (label.length) {
+            if (!label.data('orig')) {
+                label.data('orig', label.text());
+            }
+            if (label.text().indexOf('落下開始高度') === -1) {
+                label.text(label.data('orig').replace('打ち上げ高度', '落下開始高度'));
+            }
+        }
+    } else {
+        disableIds.forEach(function (id) { $(id).prop('disabled', false).removeClass('fall-disabled'); });
+        $('#burst-calc-show').show();
+
+        var labelReset = $('label[for="initial_alt"]');
+        if (labelReset.length && labelReset.data('orig')) {
+            labelReset.text(labelReset.data('orig'));
+        }
+    }
+}
+
+$(document).on('change', '#prediction_type', function () {
+    updateFallModeUI();
+});
+
+$(function () {
+    updateFallModeUI();
+});
 
 // Tawhiri API URL. Refer to API docs here: https://tawhiri.readthedocs.io/en/latest/api.html
 // Habitat Tawhiri Instance
@@ -358,7 +414,7 @@ function tawhiriRequest(settings, extra_settings, api_url) {
         delete apiSettings.pred_type;
         $.get(api_url, apiSettings)
             .done(function (data) {
-                processTawhiriResults(data, settings, api_url);
+                processTawhiriResults(data, settings, api_url, false);
             })
             .fail(function (data) {
                 var prediction_error = "Prediction failed. ";
@@ -382,6 +438,21 @@ function tawhiriRequest(settings, extra_settings, api_url) {
             .always(function (data) {
                 //throwError("test.");
                 //console.log(data);
+            });
+    } else if (settings.pred_type == 'fall') {
+        hourly_mode = false;
+        var fallApiSettings = JSON.parse(JSON.stringify(settings));
+        delete fallApiSettings.pred_type;
+        $.get(api_url, fallApiSettings)
+            .done(function (data) {
+                processTawhiriResults(data, settings, api_url, true);
+            })
+            .fail(function (data) {
+                var prediction_error = '落下モード予測に失敗しました。';
+                if (data.hasOwnProperty("responseJSON") && data.responseJSON.error) {
+                    prediction_error += data.responseJSON.error.description;
+                }
+                throwError(prediction_error);
             });
     } else {
         // For Multiple predictions, we do things a bit differently.
@@ -481,7 +552,7 @@ function tawhiriRequest(settings, extra_settings, api_url) {
     }
 }
 
-function processTawhiriResults(data, settings, api_url) {
+function processTawhiriResults(data, settings, api_url, fall_only) {
     // Process results from a Tawhiri run.
 
     if (data.hasOwnProperty('error')) {
@@ -490,23 +561,74 @@ function processTawhiriResults(data, settings, api_url) {
     } else {
 
         var prediction_results = parsePrediction(data.prediction);
+        var extended_results = prediction_results;
 
-        plotStandardPrediction(prediction_results);
+        if (fall_only) {
+            try {
+                var userStartAlt = settings.fall_user_start_alt;
+                var descentPath = data.prediction[1].trajectory || [];
+                if (descentPath.length > 0) {
+                    var first = descentPath[0];
+                    var _lonf = first.longitude;
+                    if (_lonf > 180) _lonf = _lonf - 360.0;
+                    var altOffset = first.altitude - userStartAlt;
 
-        writePredictionInfo(settings, data.metadata, data.request, api_url);
+                    var fp = [];
+                    var fp_time = [];
+                    descentPath.forEach(function (item) {
+                        var _lat = item.latitude;
+                        var _lon = item.longitude;
+                        if (_lon > 180) _lon = _lon - 360.0;
+                        var adjAlt = item.altitude - altOffset;
+                        if (adjAlt < 0) adjAlt = 0;
+                        fp.push([_lat, _lon, adjAlt]);
+                        fp_time.push({ lat: _lat, lon: _lon, alt: adjAlt, datetime: moment.utc(item.datetime) });
+                    });
+
+                    extended_results.flight_path = fp;
+                    extended_results.flight_path_time = fp_time;
+                    extended_results.launch = {
+                        latlng: L.latLng([first.latitude, _lonf, userStartAlt]),
+                        datetime: moment.utc(first.datetime)
+                    };
+                    extended_results.burst = extended_results.launch;
+
+                    var landingLL = extended_results.landing.latlng;
+                    extended_results.landing.latlng = L.latLng([
+                        landingLL.lat,
+                        landingLL.lng,
+                        Math.max(0, landingLL.alt - altOffset)
+                    ]);
+                    extended_results.flight_time = extended_results.landing.datetime.diff(extended_results.launch.datetime, 'seconds');
+                    extended_results.profile = 'fall_only';
+                }
+            } catch (e) {
+                appendDebug('落下モード変換失敗: ' + e);
+            }
+        }
+
+        if (fall_only) {
+            plotFallOnlyPrediction(extended_results, settings);
+        } else {
+            plotStandardPrediction(extended_results);
+        }
+
+        writePredictionInfo(settings, data.metadata, data.request, api_url, fall_only ? extended_results : null);
 
         // Update Chart
-        if (typeof updateAltitudeChart === "function") {
+        if (!fall_only && typeof updateAltitudeChart === "function") {
             updateAltitudeChart(data.prediction);
         }
 
         // Update Wind Chart
-        if (typeof updateWindChart === "function") {
+        if (!fall_only && typeof updateWindChart === "function") {
             updateWindChart(data.prediction);
         }
 
         // C1: 風速情報を計算・表示
-        computeSurfaceWind(data.prediction);
+        if (!fall_only) {
+            computeSurfaceWind(data.prediction);
+        }
     }
 
     //console.log(data);
@@ -1183,22 +1305,105 @@ function updateLandSeaUI(isWater, rowId) {
     }
 }
 
+function plotFallOnlyPrediction(prediction, settings) {
+    appendDebug('落下のみモード: 下降経路を描画');
+    clearMapItems();
+
+    var launch = prediction.launch;
+    var landing = prediction.landing;
+
+    var range = distHaversine(launch.latlng, landing.latlng, 1);
+    var f_hours = Math.floor(prediction.flight_time / 3600);
+    var f_minutes = Math.floor(((prediction.flight_time % 86400) % 3600) / 60);
+    if (f_minutes < 10) f_minutes = '0' + f_minutes;
+    var flighttime = f_hours + 'hr' + f_minutes;
+
+    $("#cursor_pred_range").html(range);
+    $("#cursor_pred_time").html(flighttime);
+    cursorPredShow();
+
+    var launch_icon = L.icon({ iconUrl: launch_img, iconSize: [10, 10], iconAnchor: [5, 5] });
+    var land_icon = L.icon({ iconUrl: land_img, iconSize: [10, 10], iconAnchor: [5, 5] });
+
+    var launch_marker = L.marker(launch.latlng, {
+        title: '落下開始 (' + launch.latlng.lat.toFixed(4) + ', ' + launch.latlng.lng.toFixed(4) + ') 高度 ' + launch.latlng.alt.toFixed(0) + 'm JST ' + getJSTFormatted(launch.datetime),
+        icon: launch_icon
+    }).addTo(map);
+
+    var land_marker = L.marker(landing.latlng, {
+        title: '着地点 (' + landing.latlng.lat.toFixed(4) + ', ' + landing.latlng.lng.toFixed(4) + ') JST ' + getJSTFormatted(landing.datetime),
+        icon: land_icon
+    }).addTo(map);
+
+    var launchPopup = '<b>落下開始</b><br>' +
+        '<b>時刻:</b> ' + getJSTDateTimeFormatted(launch.datetime) + ' JST<br>' +
+        '<b>座標:</b> ' + formatCoord(launch.latlng.lat, 'lat') + ', ' + formatCoord(launch.latlng.lng, 'lon') + '<br>' +
+        '<b>開始高度:</b> ' + launch.latlng.alt.toFixed(0) + ' m<br>' +
+        '<b>下降速度:</b> ' + (settings.descent_rate != null ? settings.descent_rate : '?') + ' m/s';
+    launch_marker.bindPopup(launchPopup);
+
+    var landPopup = '<b>着地予測</b><br>' +
+        '<b>落下時刻:</b> ' + getJSTDateTimeFormatted(landing.datetime) + ' JST<br>' +
+        '<b>座標:</b> ' + formatCoord(landing.latlng.lat, 'lat') + ', ' + formatCoord(landing.latlng.lng, 'lon') + '<br>' +
+        '<b>飛行時間:</b> ' + flighttime + '<br>' +
+        '<b>到達距離:</b> ' + range + ' km';
+    land_marker.bindPopup(landPopup);
+
+    var path_polyline = L.polyline(prediction.flight_path, {
+        weight: 3,
+        color: '#4444aa',
+        dashArray: '4,4'
+    }).addTo(map);
+
+    map_items['launch_marker'] = launch_marker;
+    map_items['land_marker'] = land_marker;
+    map_items['path_polyline'] = path_polyline;
+
+    map.setView(launch.latlng, 8);
+    return true;
+}
+
 
 // Populate and enable the download CSV, KML and Pan To links, and write the 
 // time the prediction was run and the model used to the Scenario Info window
-function writePredictionInfo(settings, metadata, request, api_url) {
+function writePredictionInfo(settings, metadata, request, api_url, fall_results) {
     // populate the download links
 
     // Create the API URLs based on the current prediction settings
-    // API URLが渡されない場合はデフォルトを使用
-    if (!api_url) api_url = "/api/v1/";
-    _base_url = api_url + "?" + $.param(settings)
-    _csv_url = _base_url + "&format=csv";
-    _kml_url = _base_url + "&format=kml";
+    if (fall_results) {
+        var header = 'lat,lon,alt_m,datetime_UTC';
+        var csvLines = [header];
 
+        if (Array.isArray(fall_results.flight_path_time)) {
+            fall_results.flight_path_time.forEach(function (pt) {
+                var dt = pt.datetime ? pt.datetime.clone().utc().format('YYYY-MM-DD HH:mm:ss') : '';
+                csvLines.push(pt.lat.toFixed(6) + ',' + pt.lon.toFixed(6) + ',' + pt.alt.toFixed(1) + ',' + dt);
+            });
+        } else {
+            fall_results.flight_path.forEach(function (p) {
+                csvLines.push(p[0].toFixed(6) + ',' + p[1].toFixed(6) + ',' + p[2].toFixed(1) + ',');
+            });
+        }
 
-    $("#dlcsv").attr("href", _csv_url);
-    $("#dlkml").attr("href", _kml_url);
+        var csvBlob = new Blob([csvLines.join('\n')], { type: 'text/csv' });
+        var csvUrl = URL.createObjectURL(csvBlob);
+        $("#dlcsv").attr('href', csvUrl).attr('download', 'FallOnly.csv');
+
+        var kmlPts = fall_results.flight_path.map(function (p) { return p[1] + ',' + p[0] + ',' + p[2]; }).join(' ');
+        var kml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+            '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Fall Only Descent</name><LineString><coordinates>' + kmlPts + '</coordinates></LineString></Placemark></Document></kml>';
+        var kmlBlob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+        var kmlUrl = URL.createObjectURL(kmlBlob);
+        $("#dlkml").attr("href", kmlUrl).attr('download', 'fall_only.kml');
+    } else {
+        // API URLが渡されない場合はデフォルトを使用
+        if (!api_url) api_url = "/api/v1/";
+        _base_url = api_url + "?" + $.param(settings)
+        _csv_url = _base_url + "&format=csv";
+        _kml_url = _base_url + "&format=kml";
+        $("#dlcsv").attr("href", _csv_url).removeAttr('download');
+        $("#dlkml").attr("href", _kml_url).removeAttr('download');
+    }
     $("#panto").click(function () {
         map.panTo(map_items['launch_marker'].getLatLng());
         //map.setZoom(7);

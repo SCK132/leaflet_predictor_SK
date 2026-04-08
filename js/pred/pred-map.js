@@ -17,6 +17,9 @@ function initMap(centre_lat, centre_lon, zoom_level) {
     // LEAFLET MAP SETUP
     //
     // Setup a basic Leaflet map
+    if (!window.coordFormat) {
+        window.coordFormat = 'dd';
+    }
     map = L.map('map_canvas').setView([centre_lat, centre_lon], zoom_level);
 
     // Add OSM Map Layer
@@ -51,6 +54,27 @@ function initMap(centre_lat, centre_lon, zoom_level) {
 
 }
 
+// Convert decimal degrees to Degrees Minutes Seconds string
+function decToDMS(dec, type) {
+    var d = Math.floor(Math.abs(dec));
+    var minFloat = (Math.abs(dec) - d) * 60;
+    var m = Math.floor(minFloat);
+    var secFloat = (minFloat - m) * 60;
+    var s = secFloat.toFixed(1);
+    if (s === '60.0') {
+        s = '0.0';
+        m += 1;
+    }
+    if (m === 60) {
+        m = 0;
+        d += 1;
+    }
+    var hemi = '';
+    if (type === 'lat') hemi = dec >= 0 ? 'N' : 'S';
+    else if (type === 'lon') hemi = dec >= 0 ? 'E' : 'W';
+    return d + '°' + m + "'" + s + '"' + hemi;
+}
+
 // Enable or disable user control of the map canvas, including scrolling,
 // zooming and clicking
 function enableMap(map, state) {
@@ -72,10 +96,13 @@ function enableMap(map, state) {
 // This should be called on a "mousemove" event handler on the map canvas
 // and will update scenario information display
 function showMousePos(LatLng) {
-    var curr_lat = LatLng.lat.toFixed(4);
-    var curr_lon = LatLng.lng.toFixed(4);
-    $("#cursor_lat").html(curr_lat);
-    $("#cursor_lon").html(curr_lon);
+    if (window.coordFormat && window.coordFormat === 'dms') {
+        $("#cursor_lat").html(decToDMS(LatLng.lat, 'lat'));
+        $("#cursor_lon").html(decToDMS(LatLng.lng, 'lon'));
+    } else {
+        $("#cursor_lat").html(LatLng.lat.toFixed(4));
+        $("#cursor_lon").html(LatLng.lng.toFixed(4));
+    }
     // if we have a prediction displayed
     // show range from launch and land:
     if ((map_items['launch_marker'] != null) && (hourly_mode == false)) {
@@ -87,6 +114,28 @@ function showMousePos(LatLng) {
         $("#cursor_pred_landrange").html(range_land);
     }
 
+}
+
+function formatCoord(value, type) {
+    if (window.coordFormat === 'dms') {
+        return decToDMS(value, type);
+    }
+    return value.toFixed(4);
+}
+
+function updateCoordinateFormat() {
+    if (typeof map_items === 'undefined') return;
+    ['launch_marker', 'land_marker', 'pop_marker'].forEach(function (k) {
+        var mk = map_items[k];
+        if (!mk || !mk.getLatLng) return;
+        var ll = mk.getLatLng();
+        var title = mk.options && mk.options.title ? mk.options.title : '';
+        if (title) {
+            var newCoord = '(' + formatCoord(ll.lat, 'lat') + ', ' + formatCoord(ll.lng, 'lon') + ')';
+            title = title.replace(/\([^)]*\)/, newCoord);
+            if (mk.options) mk.options.title = title;
+        }
+    });
 }
 
 // Read the latitude and longitude currently in the launch card and plot
